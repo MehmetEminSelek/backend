@@ -27,7 +27,8 @@ export default async function handler(req, res) {
         kutular,
         materials,
         cariler,
-        kategoriler
+        kategoriler,
+        odemeYontemleri
       ] = await Promise.all([
         prisma.teslimatTuru.findMany({ where: { aktif: true }, orderBy: { ad: 'asc' } }),
         prisma.sube.findMany({ where: { aktif: true }, orderBy: { ad: 'asc' } }),
@@ -48,6 +49,10 @@ export default async function handler(req, res) {
             adres: true,
             il: true,
             ilce: true,
+            cariGrubu: true,
+            fiyatGrubu: true,
+            subeAdi: true,
+            irtibatAdi: true,
             adresler: {
               where: { aktif: true },
               orderBy: [{ varsayilan: 'desc' }, { createdAt: 'asc' }],
@@ -65,7 +70,14 @@ export default async function handler(req, res) {
             }
           }
         }),
-        prisma.urunKategori.findMany({ where: { aktif: true }, orderBy: { ad: 'asc' } })
+        prisma.urunKategori.findMany({ where: { aktif: true }, orderBy: { ad: 'asc' } }),
+        prisma.systemSetting.findMany({ 
+          where: { 
+            category: 'ODEME_YONTEMLERI',
+            key: { startsWith: 'ODEME_YONTEMI_' }
+          },
+          orderBy: { key: 'asc' } 
+        })
       ]);
 
       console.log('Veritabanından dropdown verileri başarıyla çekildi.');
@@ -121,6 +133,16 @@ export default async function handler(req, res) {
           kod: item.kod,
           aciklama: item.aciklama
         })),
+        odemeYontemleri: odemeYontemleri.map(item => {
+          const data = JSON.parse(item.value);
+          return {
+            id: item.id,
+            ad: data.ad,
+            kod: data.kod,
+            enumValue: data.enumValue,
+            aciklama: data.aciklama
+          };
+        }),
         // Material sisteminden gelen veriler
         hammaddeler: hammaddeler.map(item => ({
           id: item.id,
@@ -156,7 +178,7 @@ export default async function handler(req, res) {
         cariler: cariler.map(item => ({
           id: item.id,
           ad: item.ad,
-          soyad: item.soyad,
+          soyad: item.soyad || '',
           tamAd: `${item.ad} ${item.soyad || ''}`.trim(),
           telefon: item.telefon ? String(item.telefon) : '',
           email: item.email || '',
@@ -164,7 +186,12 @@ export default async function handler(req, res) {
           adres: item.adres || '',
           il: item.il || '',
           ilce: item.ilce || '',
-          adresler: item.adresler || []
+          adresler: item.adresler || [],
+          // CSV'den gelen ek alanlar
+          subeAdi: item.subeAdi || '',
+          irtibatAdi: item.irtibatAdi || '',
+          cariGrubu: item.cariGrubu || '',
+          fiyatGrubu: item.fiyatGrubu || ''
         }))
       };
 

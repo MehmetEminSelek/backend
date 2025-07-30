@@ -11,7 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 // CSV dosya yolu
-const CSV_PATH = path.join(__dirname, '../../../veriler/Şube ve Operasyon Birimi Kodları.csv');
+const CSV_PATH = path.join(__dirname, '../../veriler/Şube ve Operasyon Birimi Kodları.csv');
 
 /**
  * CSV dosyasını okuyan Promise-based helper
@@ -153,8 +153,7 @@ async function main() {
                         data: {
                             ad: item.ad,
                             tip: item.tip,
-                            aktif: item.aktif,
-                            aciklama: item.aciklama
+                            aktif: item.aktif
                         }
                     });
                 } else {
@@ -166,8 +165,7 @@ async function main() {
                             ad: item.ad,
                             kod: item.kod,
                             tip: item.tip,
-                            aktif: item.aktif,
-                            aciklama: item.aciklama
+                            aktif: item.aktif
                         }
                     });
                 }
@@ -241,12 +239,5 @@ async function main() {
     }
 }
 
-// Script'i çalıştır
-main()
-    .catch((e) => {
-        console.error('❌ Fatal Error:', e);
-        process.exit(1);
-    })
-    .finally(async () => {
-        await prisma.$disconnect();
-    }); 
+// Export function
+module.exports = { seedSubeOperasyonBirimleri: main }; 

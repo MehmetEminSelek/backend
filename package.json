@@ -55,7 +55,10 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "prisma": "^6.6.0"
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "prisma": "^6.6.0",
+    "stream-browserify": "^3.0.0"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

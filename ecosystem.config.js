@@ -86,13 +86,26 @@ module.exports = {
     deploy: {
         production: {
             user: 'root',
-            host: 'your-server-ip',
-            ref: 'origin/master',
-            repo: 'https://github.com/MehmetEminSelek/og.git',
-            path: '/home/ogsiparis.com/public_html',
+            host: 'your-hostinger-vps-ip',  // Hostinger VPS IP'nizi buraya yazın
+            ref: 'origin/main',
+            repo: 'https://github.com/your-username/og-siparis.git',  // GitHub repo URL'nizi yazın
+            path: '/var/www/ogsiparis',  // Hostinger VPS deployment path
             'pre-deploy-local': '',
-            'post-deploy': 'cd backend && npm install --production && cd ../frontend && npm install && npm run build && cd ../backend && pm2 reload ecosystem.config.js --env production',
-            'pre-setup': '',
+            'post-deploy': 'cd backend && cp .env.production .env && npm install --production && npx prisma generate && npx prisma migrate deploy && cd ../frontend && cp .env.production .env && npm install && npm run build && cd ../backend && pm2 reload ecosystem.config.js --env production && sudo systemctl reload nginx',
+            'pre-setup': 'mkdir -p /var/www/ogsiparis/backend/logs && mkdir -p /var/www/ogsiparis/frontend',
+            'ssh_options': 'StrictHostKeyChecking=no'
+        },
+        
+        // Hostinger staging environment (opsiyonel)
+        staging: {
+            user: 'root',
+            host: 'your-hostinger-vps-ip',
+            ref: 'origin/develop',
+            repo: 'https://github.com/your-username/og-siparis.git',
+            path: '/var/www/staging-ogsiparis',
+            'pre-deploy-local': '',
+            'post-deploy': 'cd backend && cp .env.production .env && npm install && npx prisma generate && cd ../frontend && npm install && npm run build && cd ../backend && pm2 reload ecosystem.config.js --env staging',
+            'pre-setup': 'mkdir -p /var/www/staging-ogsiparis/backend/logs',
             'ssh_options': 'StrictHostKeyChecking=no'
         }
     }

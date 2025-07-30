@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 async function seedCariMusteriler() {
     console.log('🌱 Cari Müşteriler seed başlatılıyor...');
 
-    const csvPath = path.join(__dirname, '../../../veriler/Cari Müşteri Kodları.csv');
+    const csvPath = path.join(__dirname, '../../veriler/Cari Müşteri Kodları.csv');
 
     if (!fs.existsSync(csvPath)) {
         console.error('❌ CSV dosyası bulunamadı:', csvPath);

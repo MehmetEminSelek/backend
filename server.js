@@ -19,6 +19,31 @@ const handle = app.getRequestHandler();
 app.prepare().then(() => {
     const server = createServer(async (req, res) => {
         try {
+            // Production güvenlik headers
+            if (!dev) {
+                // Server bilgilerini gizle
+                res.removeHeader('X-Powered-By');
+                res.setHeader('X-Content-Type-Options', 'nosniff');
+                res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+                res.setHeader('X-XSS-Protection', '1; mode=block');
+                res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+                res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+
+                // HSTS
+                if (req.headers['x-forwarded-proto'] === 'https') {
+                    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+                }
+            }
+
+            // Hassas endpoint'leri engelle
+            const blockedPaths = ['/.git', '/.env', '/config', '/docker', '/.DS_Store', '/node_modules'];
+            const requestPath = req.url.toLowerCase();
+            if (blockedPaths.some(path => requestPath.startsWith(path))) {
+                res.statusCode = 404;
+                res.end('Not Found');
+                return;
+            }
+
             // CORS headers
             const origin = req.headers.origin;
             console.log('CORS DEBUG - Origin:', origin, '| Method:', req.method, '| URL:', req.url);

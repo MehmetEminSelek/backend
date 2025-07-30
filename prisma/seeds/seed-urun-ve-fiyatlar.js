@@ -12,8 +12,8 @@ const prisma = new PrismaClient();
 
 // CSV dosya yolları
 const CSV_PATHS = {
-  DROPDOWN_LISTESI: path.join(__dirname, '../../../veriler/Sipari Formu Dropdown Listeleri.csv'),
-  URUN_FIYATLARI: path.join(__dirname, '../../../veriler/Ürün ve Tepsi Fiyatları.csv')
+    DROPDOWN_LISTESI: path.join(__dirname, '../../veriler/Sipari Formu Dropdown Listeleri.csv'),
+    URUN_FIYATLARI: path.join(__dirname, '../../veriler/Ürün ve Tepsi Fiyatları.csv')
 };
 
 /**
@@ -289,12 +289,5 @@ async function main() {
     }
 }
 
-// Script'i çalıştır
-main()
-    .catch((e) => {
-        console.error('❌ Fatal Error:', e);
-        process.exit(1);
-    })
-    .finally(async () => {
-        await prisma.$disconnect();
-    }); 
+// Export function
+module.exports = { seedGuncelUrunFiyatlari: main }; 

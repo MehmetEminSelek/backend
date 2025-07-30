@@ -11,7 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 // CSV dosya yolu
-const CSV_PATH = path.join(__dirname, '../../../veriler/Ödeme Yöntemi Kodları.csv');
+const CSV_PATH = path.join(__dirname, '../../veriler/Ödeme Yöntemi Kodları.csv');
 
 /**
  * CSV dosyasını okuyan Promise-based helper
@@ -229,12 +229,5 @@ async function main() {
     }
 }
 
-// Script'i çalıştır
-main()
-    .catch((e) => {
-        console.error('❌ Fatal Error:', e);
-        process.exit(1);
-    })
-    .finally(async () => {
-        await prisma.$disconnect();
-    }); 
+// Export function
+module.exports = { seedOdemeYontemleri: main }; 
