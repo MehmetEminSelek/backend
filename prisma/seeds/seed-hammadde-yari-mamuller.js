@@ -11,7 +11,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 // CSV dosya yolu
-const CSV_PATH = path.join(__dirname, '../../../veriler/Hammade ve Yarı Mamüller Kodlar.csv');
+const CSV_PATH = path.join(__dirname, '../../veriler/Hammade ve Yarı Mamüller Kodlar.csv');
 
 /**
  * CSV dosyasını okuyan Promise-based helper
@@ -38,71 +38,71 @@ function readCSV(filePath, encoding = 'utf8') {
  * CSV'de sorun olduğu için manuel kod assignment yapıyoruz
  */
 function parseMaterials(csvData) {
-  const materials = [];
-  
-  // Doğru hammadde listesi
-  const hammaddeListesi = [
-    'ANTEP PEYNİRİ', 'CEVİZ', 'GLİKOZ', 'IRMIK NO:0', 'IRMIK NO:3',
-    'İÇ FISTIK', 'KADAYIF', 'KARAKOYUNLU UN', 'LİMON', 'MAYDANOZ',
-    'NIŞASTA', 'SADEYAĞ', 'SODA GR', 'SU', 'SÜT',
-    'TEKSİN UN', 'TOZ ŞEKER', 'TUZ', 'YOĞURT', 'YUMURTA'
-  ];
-  
-  // Yarı mamul listesi
-  const yariMamulListesi = [
-    'HAMUR (YM)', 'KAYMAK (YM)', 'SERBET (YM)'
-  ];
-  
-  csvData.forEach((row, index) => {
-    const hammaddeAdi = row['HAMMADDE ADI'];
-    const yariMamulAdi = row['YARI MAMUL ADI '];
-    
-    // Hammadde işleme
-    if (hammaddeAdi && hammaddeAdi.trim()) {
-      const hammaddeIndex = hammaddeListesi.indexOf(hammaddeAdi.trim());
-      if (hammaddeIndex !== -1) {
-        const hammaddeKodu = `HM${String(hammaddeIndex + 1).padStart(3, '0')}`;
-        
-        materials.push({
-          ad: hammaddeAdi.trim(),
-          kod: hammaddeKodu,
-          tipi: 'HAMMADDE',
-          birim: determineBirim(hammaddeAdi.trim()),
-          aktif: true,
-          birimFiyat: 0,
-          mevcutStok: 0,
-          minStokSeviye: 0,
-          kritikSeviye: 10
-        });
-        
-        console.log(`✅ Hammadde: ${hammaddeAdi.trim()} -> ${hammaddeKodu}`);
-      }
-    }
-    
-    // Yarı mamul işleme (sadece ilk 3 satırda)
-    if (yariMamulAdi && yariMamulAdi.trim() && index < 3) {
-      const yariMamulIndex = yariMamulListesi.indexOf(yariMamulAdi.trim());
-      if (yariMamulIndex !== -1) {
-        const yariMamulKodu = `YM${String(yariMamulIndex + 1).padStart(3, '0')}`;
-        
-        materials.push({
-          ad: yariMamulAdi.trim(),
-          kod: yariMamulKodu,
-          tipi: 'YARI_MAMUL',
-          birim: 'KG',
-          aktif: true,
-          birimFiyat: 0,
-          mevcutStok: 0,
-          minStokSeviye: 0,
-          kritikSeviye: 5
-        });
-        
-        console.log(`✅ Yarı Mamul: ${yariMamulAdi.trim()} -> ${yariMamulKodu}`);
-      }
-    }
-  });
-  
-  return materials;
+    const materials = [];
+
+    // Doğru hammadde listesi
+    const hammaddeListesi = [
+        'ANTEP PEYNİRİ', 'CEVİZ', 'GLİKOZ', 'IRMIK NO:0', 'IRMIK NO:3',
+        'İÇ FISTIK', 'KADAYIF', 'KARAKOYUNLU UN', 'LİMON', 'MAYDANOZ',
+        'NIŞASTA', 'SADEYAĞ', 'SODA GR', 'SU', 'SÜT',
+        'TEKSİN UN', 'TOZ ŞEKER', 'TUZ', 'YOĞURT', 'YUMURTA'
+    ];
+
+    // Yarı mamul listesi
+    const yariMamulListesi = [
+        'HAMUR (YM)', 'KAYMAK (YM)', 'SERBET (YM)'
+    ];
+
+    csvData.forEach((row, index) => {
+        const hammaddeAdi = row['HAMMADDE ADI'];
+        const yariMamulAdi = row['YARI MAMUL ADI '];
+
+        // Hammadde işleme
+        if (hammaddeAdi && hammaddeAdi.trim()) {
+            const hammaddeIndex = hammaddeListesi.indexOf(hammaddeAdi.trim());
+            if (hammaddeIndex !== -1) {
+                const hammaddeKodu = `HM${String(hammaddeIndex + 1).padStart(3, '0')}`;
+
+                materials.push({
+                    ad: hammaddeAdi.trim(),
+                    kod: hammaddeKodu,
+                    tipi: 'HAMMADDE',
+                    birim: determineBirim(hammaddeAdi.trim()),
+                    aktif: true,
+                    birimFiyat: 0,
+                    mevcutStok: 0,
+                    minStokSeviye: 0,
+                    kritikSeviye: 10
+                });
+
+                console.log(`✅ Hammadde: ${hammaddeAdi.trim()} -> ${hammaddeKodu}`);
+            }
+        }
+
+        // Yarı mamul işleme (sadece ilk 3 satırda)
+        if (yariMamulAdi && yariMamulAdi.trim() && index < 3) {
+            const yariMamulIndex = yariMamulListesi.indexOf(yariMamulAdi.trim());
+            if (yariMamulIndex !== -1) {
+                const yariMamulKodu = `YM${String(yariMamulIndex + 1).padStart(3, '0')}`;
+
+                materials.push({
+                    ad: yariMamulAdi.trim(),
+                    kod: yariMamulKodu,
+                    tipi: 'YARI_MAMUL',
+                    birim: 'KG',
+                    aktif: true,
+                    birimFiyat: 0,
+                    mevcutStok: 0,
+                    minStokSeviye: 0,
+                    kritikSeviye: 5
+                });
+
+                console.log(`✅ Yarı Mamul: ${yariMamulAdi.trim()} -> ${yariMamulKodu}`);
+            }
+        }
+    });
+
+    return materials;
 }
 
 /**
@@ -242,12 +242,5 @@ async function main() {
     }
 }
 
-// Script'i çalıştır
-main()
-    .catch((e) => {
-        console.error('❌ Fatal Error:', e);
-        process.exit(1);
-    })
-    .finally(async () => {
-        await prisma.$disconnect();
-    }); 
+// Export function
+module.exports = { seedHammadeYariMamuller: main }; 

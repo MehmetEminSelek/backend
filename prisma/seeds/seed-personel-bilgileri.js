@@ -88,7 +88,7 @@ function generatePersonelId(index) {
 async function seedPersonelBilgileri() {
     console.log('🌱 Personel Bilgileri seed başlatılıyor...');
 
-    const csvPath = path.join(__dirname, '../../../veriler/Personel Bilgileri.csv');
+    const csvPath = path.join(__dirname, '../../veriler/Personel Bilgileri.csv');
 
     if (!fs.existsSync(csvPath)) {
         console.error('❌ CSV dosyası bulunamadı:', csvPath);

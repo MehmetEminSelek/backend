@@ -56,6 +56,38 @@ function parseFormSecurely(req) {
             }
         });
     });
+};
+
+const cleanRow = (row) => {
+    const clean = {};
+    Object.keys(row).forEach(k => { clean[k.trim()] = row[k]; });
+    return clean;
+};
+
+// Yeni müşteri kodu oluştur
+async function generateNextMusteriKodu() {
+    // En son müşteri kodunu bul
+    const lastCari = await prisma.cari.findFirst({
+        where: {
+            musteriKodu: {
+                startsWith: 'MS'
+            }
+        },
+        orderBy: {
+            musteriKodu: 'desc'
+        }
+    });
+
+    if (!lastCari) {
+        return 'MS000001';
+    }
+
+    // MS000001 formatından sayıyı çıkar
+    const lastNumber = parseInt(lastCari.musteriKodu.substring(2));
+    const nextNumber = lastNumber + 1;
+
+    // Yeni kodu oluştur (6 hane, başında sıfırlar)
+    return `MS${String(nextNumber).padStart(6, '0')}`;
 }
 
 /**
@@ -352,15 +384,15 @@ async function uploadCustomersFromExcel(req, res) {
 
                     // Create customer
                     const newCustomer = await tx.secureQuery('cariMusteri', 'create', {
-                data: {
-                    ad,
+                        data: {
+                            ad,
                             soyad,
                             telefon: customerData.telefon,
                             email: customerData.email || null,
                             musteriKodu: customerData.musteriKodu,
                             musteriTipi: customerData.musteriTipi,
                             bolge: customerData.bolge || null,
-                    subeId,
+                            subeId,
                             aktif: true,
                             olusturmaTarihi: new Date(),
                             olusturanKullanici: req.user.userId
