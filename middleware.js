@@ -1,14 +1,11 @@
 /**
  * =============================================
- * MASTER SECURITY MIDDLEWARE - INTEGRATION
+ * BASIC MIDDLEWARE - SIMPLIFIED
  * =============================================
- * ALL 10 SECURITY LAYERS INTEGRATED
+ * Basic security and CORS handling
  */
 
 import { NextResponse } from 'next/server';
-import { securityMiddleware } from './lib/security-middleware.js';
-import { API_SECURITY_CONFIG } from './lib/api-security.js';
-import { auditLog } from './lib/audit-logger.js';
 
 export async function middleware(request) {
     const startTime = Date.now();
@@ -17,149 +14,47 @@ export async function middleware(request) {
     const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
 
     try {
-        // ===== LAYER 1-6: BASIC SECURITY MIDDLEWARE =====
-        // Apply enhanced security middleware (rate limiting, CSRF, headers, etc.)
-        const securityResponse = await securityMiddleware(request);
-        if (securityResponse) {
-            // Security middleware blocked the request
-            auditLog('SECURITY_BLOCKED', 'Request blocked by security middleware', {
-                pathname,
-                method,
-                ip,
-                reason: 'Security middleware rejection'
-            });
-            return securityResponse;
-        }
+        // Basic CORS headers
+        const response = NextResponse.next();
 
-        // ===== LAYER 7: API ENDPOINT CLASSIFICATION =====
-        const isAPIRoute = pathname.startsWith('/api/');
-        const isPublicEndpoint = API_SECURITY_CONFIG.PUBLIC_ENDPOINTS.some(endpoint =>
-            pathname.startsWith(endpoint)
-        );
-        const requiresAuth = API_SECURITY_CONFIG.AUTH_REQUIRED.some(endpoint =>
-            pathname.startsWith(endpoint)
-        );
-
-        // ===== LAYER 8: AUTHENTICATION REQUIREMENT CHECK =====
-        if (isAPIRoute && requiresAuth && !isPublicEndpoint) {
-            const authHeader = request.headers.get('authorization');
-            const authToken = request.cookies.get('auth_token')?.value;
-
-            if (!authHeader && !authToken) {
-                auditLog('AUTH_REQUIRED', 'API endpoint requires authentication', {
-                    pathname,
-                    method,
-                    ip
-                });
-
-                return NextResponse.json(
-                    {
-                        error: 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.',
-                        code: 'AUTH_REQUIRED'
-                    },
-                    { status: 401 }
-                );
-            }
-        }
-
-        // ===== LAYER 9: REQUEST SIZE VALIDATION =====
-        const contentLength = request.headers.get('content-length');
-        if (contentLength) {
-            const size = parseInt(contentLength);
-            const maxSize = 50 * 1024 * 1024; // 50MB
-
-            if (size > maxSize) {
-                auditLog('REQUEST_TOO_LARGE', 'Request size exceeded limit', {
-                    pathname,
-                    method,
-                    ip,
-                    size
-                });
-
-                return NextResponse.json(
-                    {
-                        error: 'İstek boyutu çok büyük',
-                        code: 'REQUEST_TOO_LARGE'
-                    },
-                    { status: 413 }
-                );
-            }
-        }
-
-        // ===== LAYER 10: SUSPICIOUS ACTIVITY DETECTION =====
-        const userAgent = request.headers.get('user-agent') || '';
-        const suspiciousPatterns = [
-            /bot|crawler|spider/i,
-            /curl|wget|python|postman/i,
-            /sqlmap|nikto|nmap/i,
-            /\b(union|select|insert|delete|drop)\b/i
+        // CORS configuration
+        const origin = request.headers.get('origin');
+        const allowedOrigins = [
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'https://ogsiparis.com',
+            'https://www.ogsiparis.com'
         ];
 
-        const isSuspicious = suspiciousPatterns.some(pattern => pattern.test(userAgent)) ||
-            suspiciousPatterns.some(pattern => pattern.test(pathname));
-
-        if (isSuspicious && !isPublicEndpoint) {
-            auditLog('SUSPICIOUS_ACTIVITY', 'Suspicious request pattern detected', {
-                pathname,
-                method,
-                ip,
-                userAgent,
-                reason: 'Suspicious user agent or URL pattern'
-            });
-
-            // Don't block but monitor
-            console.warn('Suspicious activity detected:', {
-                pathname,
-                ip,
-                userAgent: userAgent.substring(0, 100)
-            });
+        if (allowedOrigins.includes(origin)) {
+            response.headers.set('Access-Control-Allow-Origin', origin);
         }
 
-        // ===== SUCCESS: CONTINUE TO ROUTE =====
-        const duration = Date.now() - startTime;
+        response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+        response.headers.set('Access-Control-Allow-Credentials', 'true');
 
-        // Only audit for API routes to avoid noise
-        if (isAPIRoute) {
-            auditLog('MIDDLEWARE_SUCCESS', 'Request passed all security layers', {
-                pathname,
-                method,
-                ip,
-                duration,
-                requiresAuth,
-                isPublic: isPublicEndpoint
-            });
+        // Basic security headers
+        response.headers.set('X-Frame-Options', 'DENY');
+        response.headers.set('X-Content-Type-Options', 'nosniff');
+        response.headers.set('X-XSS-Protection', '1; mode=block');
+
+        // Handle preflight requests
+        if (method === 'OPTIONS') {
+            return new Response(null, { status: 200, headers: response.headers });
         }
 
-        return NextResponse.next();
+        return response;
 
     } catch (error) {
-        const duration = Date.now() - startTime;
-
-        auditLog('MIDDLEWARE_ERROR', 'Security middleware error', {
-            pathname,
-            method,
-            ip,
-            duration,
-            error: error.message
-        });
-
-        console.error('Security Middleware Error:', error);
-
-        // In case of error, allow request but log it
+        console.error('❌ Middleware error:', error);
         return NextResponse.next();
     }
 }
 
-// ===== MIDDLEWARE CONFIGURATION =====
 export const config = {
     matcher: [
-        /*
-         * Match all request paths except for the ones starting with:
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         * - public folder files
-         */
-        '/((?!_next/static|_next/image|favicon.ico|public/).*)',
-    ],
+        '/api/:path*',
+        '/((?!_next|favicon.ico).*)'
+    ]
 };
