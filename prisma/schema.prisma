@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -36,7 +36,7 @@ model User {
   rol         PersonelRol @default(PERSONEL)
   gunlukUcret Float?      @default(0)
   sgkDurumu   SgkDurumu   @default(YOK)
-  girisYili   DateTime?   @db.Date
+  girisYili   DateTime?   
   aktif       Boolean     @default(true)
   erpDurum    ErpDurum    @default(AKTIF)
 
@@ -239,8 +239,8 @@ model UrunFiyat {
   fiyatTipi    FiyatTipi    @default(NORMAL)
 
   // TARİHSEL TAKİP - ÇOK ÖNEMLİ!
-  baslangicTarihi DateTime   @db.Date  // Bu fiyatın geçerli olduğu başlangıç tarihi
-  bitisTarihi     DateTime?  @db.Date  // Bu fiyatın geçersiz olduğu tarih (NULL = hala geçerli)
+  baslangicTarihi DateTime     // Bu fiyatın geçerli olduğu başlangıç tarihi
+  bitisTarihi     DateTime?    // Bu fiyatın geçersiz olduğu tarih (NULL = hala geçerli)
   
   // Durum Kontrolü
   aktif        Boolean      @default(true)
@@ -273,8 +273,8 @@ model TepsiFiyat {
   fiyatTipi       FiyatTipi    @default(NORMAL)
   
   // TARİHSEL TAKİP
-  baslangicTarihi DateTime     @db.Date
-  bitisTarihi     DateTime?    @db.Date
+  baslangicTarihi DateTime     
+  bitisTarihi     DateTime?    
   
   // Durum Kontrolü
   aktif           Boolean      @default(true)
@@ -526,8 +526,8 @@ model Siparis {
   siparisNo String @unique @default(uuid())
 
   // Date Info
-  tarih        DateTime  @db.Date
-  teslimTarihi DateTime? @db.Date
+  tarih        DateTime  
+  teslimTarihi DateTime? 
 
   // Customer Info  
   cariId Int?
@@ -967,7 +967,7 @@ model CariHareket {
 
   // Document Info
   belgeNo     String?
-  belgeTarihi DateTime? @db.Date
+  belgeTarihi DateTime? 
 
   // Balance Tracking
   oncekiBakiye  Float?
@@ -1004,14 +1004,14 @@ model CariOdeme {
   siparis   Siparis? @relation(fields: [siparisId], references: [id])
 
   // Payment Info
-  odemeTarihi DateTime  @db.Date
-  vadeTarihi  DateTime? @db.Date
+  odemeTarihi DateTime  
+  vadeTarihi  DateTime? 
 
   // Bank/Check Info
   bankaAdi  String?
   hesapNo   String?
   cekNo     String?
-  cekTarihi DateTime? @db.Date
+  cekTarihi DateTime? 
 
   // Status
   durum OdemeDurumu @default(ODENDI)

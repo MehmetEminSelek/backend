@@ -1,233 +1,165 @@
-// middleware.js - Edge Runtime Compatible
+/**
+ * =============================================
+ * MASTER SECURITY MIDDLEWARE - INTEGRATION
+ * =============================================
+ * ALL 10 SECURITY LAYERS INTEGRATED
+ */
+
 import { NextResponse } from 'next/server';
-import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
-import compression from 'compression';
-import cors from 'cors';
+import { securityMiddleware } from './lib/security-middleware.js';
+import { API_SECURITY_CONFIG } from './lib/api-security.js';
+import { auditLog } from './lib/audit-logger.js';
 
-// Main middleware function for Next.js (Edge Runtime)
-export function middleware(request) {
-    const response = NextResponse.next();
+export async function middleware(request) {
+    const startTime = Date.now();
+    const pathname = request.nextUrl.pathname;
+    const method = request.method;
+    const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
 
-    // Add security headers
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('X-Frame-Options', 'DENY');
-    response.headers.set('X-XSS-Protection', '1; mode=block');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-
-    return response;
-}
-
-export const config = {
-    matcher: '/api/:path*'
-};
-
-// Rate limiting - API isteklerini sınırla
-export const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 100, // IP başına maksimum 100 istek
-    message: {
-        error: 'Çok fazla istek gönderildi. Lütfen 15 dakika sonra tekrar deneyin.',
-        retryAfter: '15 dakika'
-    },
-    standardHeaders: true, // Rate limit bilgilerini header'larda döndür
-    legacyHeaders: false, // Eski header formatını kullanma
-});
-
-// Özel rate limiter - Login için daha sıkı
-export const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 dakika
-    max: 5, // IP başına maksimum 5 login denemesi
-    message: {
-        error: 'Çok fazla login denemesi. Lütfen 15 dakika sonra tekrar deneyin.',
-        retryAfter: '15 dakika'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-// CORS ayarları
-export const corsOptions = {
-    origin: function (origin, callback) {
-        // Development ortamında tüm origin'lere izin ver
-        if (process.env.NODE_ENV === 'development') {
-            return callback(null, true);
+    try {
+        // ===== LAYER 1-6: BASIC SECURITY MIDDLEWARE =====
+        // Apply enhanced security middleware (rate limiting, CSRF, headers, etc.)
+        const securityResponse = await securityMiddleware(request);
+        if (securityResponse) {
+            // Security middleware blocked the request
+            auditLog('SECURITY_BLOCKED', 'Request blocked by security middleware', {
+                pathname,
+                method,
+                ip,
+                reason: 'Security middleware rejection'
+            });
+            return securityResponse;
         }
 
-        // Production'da sadece ogsiparis.com domain'ine izin ver
-        const allowedOrigins = [
-            'https://ogsiparis.com',
-            'https://www.ogsiparis.com',
-            'http://localhost:5173', // Development için
-            'http://localhost:3000'  // Development için
+        // ===== LAYER 7: API ENDPOINT CLASSIFICATION =====
+        const isAPIRoute = pathname.startsWith('/api/');
+        const isPublicEndpoint = API_SECURITY_CONFIG.PUBLIC_ENDPOINTS.some(endpoint =>
+            pathname.startsWith(endpoint)
+        );
+        const requiresAuth = API_SECURITY_CONFIG.AUTH_REQUIRED.some(endpoint =>
+            pathname.startsWith(endpoint)
+        );
+
+        // ===== LAYER 8: AUTHENTICATION REQUIREMENT CHECK =====
+        if (isAPIRoute && requiresAuth && !isPublicEndpoint) {
+            const authHeader = request.headers.get('authorization');
+            const authToken = request.cookies.get('auth_token')?.value;
+
+            if (!authHeader && !authToken) {
+                auditLog('AUTH_REQUIRED', 'API endpoint requires authentication', {
+                    pathname,
+                    method,
+                    ip
+                });
+
+                return NextResponse.json(
+                    {
+                        error: 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.',
+                        code: 'AUTH_REQUIRED'
+                    },
+                    { status: 401 }
+                );
+            }
+        }
+
+        // ===== LAYER 9: REQUEST SIZE VALIDATION =====
+        const contentLength = request.headers.get('content-length');
+        if (contentLength) {
+            const size = parseInt(contentLength);
+            const maxSize = 50 * 1024 * 1024; // 50MB
+
+            if (size > maxSize) {
+                auditLog('REQUEST_TOO_LARGE', 'Request size exceeded limit', {
+                    pathname,
+                    method,
+                    ip,
+                    size
+                });
+
+                return NextResponse.json(
+                    {
+                        error: 'İstek boyutu çok büyük',
+                        code: 'REQUEST_TOO_LARGE'
+                    },
+                    { status: 413 }
+                );
+            }
+        }
+
+        // ===== LAYER 10: SUSPICIOUS ACTIVITY DETECTION =====
+        const userAgent = request.headers.get('user-agent') || '';
+        const suspiciousPatterns = [
+            /bot|crawler|spider/i,
+            /curl|wget|python|postman/i,
+            /sqlmap|nikto|nmap/i,
+            /\b(union|select|insert|delete|drop)\b/i
         ];
 
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('CORS policy violation'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['X-Total-Count', 'X-Page-Count']
-};
+        const isSuspicious = suspiciousPatterns.some(pattern => pattern.test(userAgent)) ||
+            suspiciousPatterns.some(pattern => pattern.test(pathname));
 
-// Güvenlik middleware'i
-export const securityMiddleware = [
-    helmet({
-        contentSecurityPolicy: {
-            directives: {
-                defaultSrc: ["'self'"],
-                styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-                fontSrc: ["'self'", "https://fonts.gstatic.com"],
-                scriptSrc: ["'self'"],
-                imgSrc: ["'self'", "data:", "https:"],
-                connectSrc: ["'self'"],
-                frameSrc: ["'none'"],
-                objectSrc: ["'none'"]
-            }
-        },
-        hsts: {
-            maxAge: 31536000,
-            includeSubDomains: true,
-            preload: true
-        },
-        noSniff: true,
-        referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
-    }),
-    compression({
-        level: 6,
-        threshold: 1024,
-        filter: (req, res) => {
-            if (req.headers['x-no-compression']) {
-                return false;
-            }
-            return compression.filter(req, res);
-        }
-    }),
-    cors(corsOptions)
-];
-
-// Request logging middleware
-export const requestLogger = (req, res, next) => {
-    const start = Date.now();
-
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        const logMessage = `${req.method} ${req.originalUrl} - ${res.statusCode} - ${duration}ms`;
-
-        if (res.statusCode >= 400) {
-            console.error(`❌ ${logMessage}`);
-        } else {
-            console.log(`✅ ${logMessage}`);
-        }
-    });
-
-    next();
-};
-
-// Error handling middleware
-export const errorHandler = (err, req, res, next) => {
-    console.error('❌ Global Error Handler:', err);
-
-    // CORS hatası
-    if (err.message === 'CORS policy violation') {
-        return res.status(403).json({
-            error: 'CORS policy violation',
-            message: 'Bu origin\'den istek gönderilmesine izin verilmiyor.'
-        });
-    }
-
-    // Rate limit hatası
-    if (err.status === 429) {
-        return res.status(429).json({
-            error: 'Rate limit exceeded',
-            message: err.message,
-            retryAfter: err.headers?.['retry-after']
-        });
-    }
-
-    // Prisma hatası
-    if (err.code === 'P2002') {
-        return res.status(409).json({
-            error: 'Duplicate entry',
-            message: 'Bu kayıt zaten mevcut.'
-        });
-    }
-
-    if (err.code === 'P2025') {
-        return res.status(404).json({
-            error: 'Record not found',
-            message: 'Kayıt bulunamadı.'
-        });
-    }
-
-    // Genel hata
-    const statusCode = err.statusCode || 500;
-    const message = err.message || 'Sunucu hatası oluştu';
-
-    res.status(statusCode).json({
-        error: 'Internal Server Error',
-        message: process.env.NODE_ENV === 'development' ? message : 'Sunucu hatası oluştu',
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-    });
-};
-
-// Response cache middleware (basit cache)
-const cache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 dakika
-
-export const responseCache = (duration = CACHE_DURATION) => {
-    return (req, res, next) => {
-        // Sadece GET istekleri için cache
-        if (req.method !== 'GET') {
-            return next();
-        }
-
-        const key = `${req.originalUrl}-${JSON.stringify(req.query)}`;
-        const cached = cache.get(key);
-
-        if (cached && Date.now() - cached.timestamp < duration) {
-            return res.json(cached.data);
-        }
-
-        // Orijinal send metodunu sakla
-        const originalSend = res.json;
-
-        // Send metodunu override et
-        res.json = function (data) {
-            // Cache'e kaydet
-            cache.set(key, {
-                data,
-                timestamp: Date.now()
+        if (isSuspicious && !isPublicEndpoint) {
+            auditLog('SUSPICIOUS_ACTIVITY', 'Suspicious request pattern detected', {
+                pathname,
+                method,
+                ip,
+                userAgent,
+                reason: 'Suspicious user agent or URL pattern'
             });
 
-            // Orijinal send metodunu çağır
-            return originalSend.call(this, data);
-        };
-
-        next();
-    };
-};
-
-// Cache temizleme (her 10 dakikada bir)
-setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of cache.entries()) {
-        if (now - value.timestamp > CACHE_DURATION) {
-            cache.delete(key);
+            // Don't block but monitor
+            console.warn('Suspicious activity detected:', {
+                pathname,
+                ip,
+                userAgent: userAgent.substring(0, 100)
+            });
         }
-    }
-}, 10 * 60 * 1000);
 
-export default {
-    apiLimiter,
-    loginLimiter,
-    corsOptions,
-    securityMiddleware,
-    requestLogger,
-    errorHandler,
-    responseCache
+        // ===== SUCCESS: CONTINUE TO ROUTE =====
+        const duration = Date.now() - startTime;
+
+        // Only audit for API routes to avoid noise
+        if (isAPIRoute) {
+            auditLog('MIDDLEWARE_SUCCESS', 'Request passed all security layers', {
+                pathname,
+                method,
+                ip,
+                duration,
+                requiresAuth,
+                isPublic: isPublicEndpoint
+            });
+        }
+
+        return NextResponse.next();
+
+    } catch (error) {
+        const duration = Date.now() - startTime;
+
+        auditLog('MIDDLEWARE_ERROR', 'Security middleware error', {
+            pathname,
+            method,
+            ip,
+            duration,
+            error: error.message
+        });
+
+        console.error('Security Middleware Error:', error);
+
+        // In case of error, allow request but log it
+        return NextResponse.next();
+    }
+}
+
+// ===== MIDDLEWARE CONFIGURATION =====
+export const config = {
+    matcher: [
+        /*
+         * Match all request paths except for the ones starting with:
+         * - _next/static (static files)
+         * - _next/image (image optimization files)
+         * - favicon.ico (favicon file)
+         * - public folder files
+         */
+        '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    ],
 };

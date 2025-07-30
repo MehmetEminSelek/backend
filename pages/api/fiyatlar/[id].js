@@ -1,4 +1,5 @@
 import prisma from '../../../lib/prisma';
+import { createAuditLog } from '../../../lib/audit-logger';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,64 +16,99 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
         try {
-            const { urunId, birim, fiyat, gecerliTarih } = req.body;
-            if (!urunId || !birim || typeof fiyat !== 'number') {
-                return res.status(400).json({ message: 'urunId, birim, fiyat (number) zorunludur.' });
-            }
-            const newStart = gecerliTarih ? new Date(gecerliTarih) : new Date();
-            // Transactional logic
-            const result = await prisma.$transaction(async (tx) => {
-                // 1. Find the current price record
-                const current = await tx.fiyat.findUnique({ where: { id } });
-                if (!current) throw { code: 'P2025', message: 'Fiyat kaydı bulunamadı.' };
-                // 2. Check for overlap: is there another price for this urunId/birim that overlaps with the new period?
-                const overlap = await tx.fiyat.findFirst({
-                    where: {
-                        id: { not: id },
-                        urunId: parseInt(urunId),
-                        birim,
-                        gecerliTarih: { lte: newStart },
-                        OR: [
-                            { bitisTarihi: null },
-                            { bitisTarihi: { gte: newStart } }
-                        ]
-                    }
+            const { urunId, birim, kgFiyati, baslangicTarihi, bitisTarihi, fiyatTipi, aktif } = req.body;
+            console.log('🔍 PUT Request Body:', req.body);
+
+            if (!urunId || !birim || typeof kgFiyati !== 'number') {
+                return res.status(400).json({
+                    message: 'urunId, birim, kgFiyati (number) zorunludur.',
+                    received: { urunId, birim, kgFiyati, type: typeof kgFiyati }
                 });
-                if (overlap) {
-                    throw { code: 'OVERLAP', message: 'Bu ürün ve birim için bu tarihte zaten aktif bir fiyat kaydı var.' };
-                }
-                // 3. Close the old price (set bitisTarihi to newStart)
-                await tx.fiyat.update({ where: { id }, data: { bitisTarihi: newStart } });
-                // 4. Create the new price
-                const created = await tx.fiyat.create({
+            }
+
+            // Basit update işlemi - mevcut kaydı güncelle
+            const updatedPrice = await prisma.urunFiyat.update({
+                where: { id },
                 data: {
-                        urunId: parseInt(urunId),
-                        birim,
-                        fiyat,
-                        gecerliTarih: newStart,
-                        bitisTarihi: null
+                    urunId: parseInt(urunId),
+                    birim,
+                    kgFiyati: kgFiyati,
+                    fiyatTipi: fiyatTipi || 'NORMAL',
+                    baslangicTarihi: baslangicTarihi ? new Date(baslangicTarihi) : undefined,
+                    bitisTarihi: bitisTarihi ? new Date(bitisTarihi) : null,
+                    aktif: aktif !== undefined ? aktif : true,
+                    updatedAt: new Date()
                 },
                 include: {
-                    urun: { select: { id: true, ad: true, kodu: true } }
+                    urun: { select: { id: true, ad: true, kod: true } }
                 }
             });
-                return created;
+
+            return res.status(200).json({
+                message: 'Fiyat başarıyla güncellendi',
+                fiyat: updatedPrice
             });
-            return res.status(201).json(result);
         } catch (error) {
             console.error('❌ PUT /api/fiyatlar/[id] HATA:', error);
             let status = 500;
             let message = 'Fiyat güncellenirken hata oluştu.';
-            if (error.code === 'P2025') { status = 404; message = 'Fiyat kaydı bulunamadı.'; }
-            if (error.code === 'OVERLAP') { status = 400; message = error.message; }
+            if (error.code === 'P2025') {
+                status = 404;
+                message = 'Güncellenecek fiyat kaydı bulunamadı.';
+            }
+            if (error.code === 'P2002') {
+                status = 400;
+                message = 'Bu ürün ve tarih için zaten bir fiyat kaydı mevcut.';
+            }
             return res.status(status).json({ message, error: error.message });
         }
     }
 
     if (req.method === 'DELETE') {
         try {
-            await prisma.fiyat.delete({ where: { id } });
-            return res.status(204).end();
+            // 📝 Silme öncesi fiyat bilgilerini al (audit log için)
+            const existingPrice = await prisma.urunFiyat.findUnique({
+                where: { id },
+                include: {
+                    urun: { select: { id: true, ad: true, kod: true } }
+                }
+            });
+
+            if (!existingPrice) {
+                return res.status(404).json({ message: 'Fiyat kaydı bulunamadı.' });
+            }
+
+            // 🗑️ Fiyat kaydını sil
+            await prisma.urunFiyat.delete({ where: { id } });
+
+            // 📝 AUDIT LOG: Fiyat silme işlemini kaydet
+            await createAuditLog({
+                personelId: 'P001', // TODO: JWT'den gerçek personel ID'si alınacak
+                action: 'DELETE',
+                tableName: 'URUN_FIYAT',
+                recordId: id,
+                oldValues: {
+                    urunId: existingPrice.urunId,
+                    urunAdi: existingPrice.urun.ad,
+                    urunKodu: existingPrice.urun.kod,
+                    birim: existingPrice.birim,
+                    fiyatTipi: existingPrice.fiyatTipi,
+                    kgFiyati: existingPrice.kgFiyati,
+                    baslangicTarihi: existingPrice.baslangicTarihi,
+                    bitisTarihi: existingPrice.bitisTarihi,
+                    aktif: existingPrice.aktif
+                },
+                newValues: null, // Silme işlemi için null
+                description: `${existingPrice.urun.ad} ürününün ${existingPrice.kgFiyati}₺ (${existingPrice.fiyatTipi}) fiyat kaydı silindi`,
+                req
+            });
+
+            console.log(`📝 AUDIT: Fiyat silindi - ${existingPrice.urun.ad} (${existingPrice.kgFiyati}₺)`);
+
+            return res.status(200).json({
+                message: 'Fiyat başarıyla silindi ve audit log\'a kaydedildi',
+                success: true
+            });
         } catch (error) {
             console.error('❌ DELETE /api/fiyatlar/[id] HATA:', error);
             let status = 500;
@@ -85,12 +121,15 @@ export default async function handler(req, res) {
     // New: GET /api/fiyatlar/[id]/orders - return count and IDs of orders that used this price
     if (req.method === 'GET' && req.query.orders === 'true') {
         try {
-            const price = await prisma.fiyat.findUnique({ where: { id } });
+            const price = await prisma.urunFiyat.findUnique({ where: { id } });
             if (!price) return res.status(404).json({ message: 'Fiyat kaydı bulunamadı.' });
-            // Find orders with tarih >= gecerliTarih and (bitisTarihi is null or tarih < bitisTarihi)
+            // Find orders with tarih >= baslangicTarihi and (bitisTarihi is null or tarih < bitisTarihi)
             const orders = await prisma.siparis.findMany({
                 where: {
-                    tarih: { gte: price.gecerliTarih, ...(price.bitisTarihi ? { lt: price.bitisTarihi } : {}) },
+                    tarih: {
+                        gte: price.baslangicTarihi,
+                        ...(price.bitisTarihi ? { lt: price.bitisTarihi } : {})
+                    },
                     kalemler: {
                         some: {
                             urunId: price.urunId,

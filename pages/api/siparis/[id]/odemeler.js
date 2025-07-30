@@ -1,106 +1,301 @@
-// pages/api/siparis/[id]/odemeler.js
-// Belirli bir siparişe yeni ödeme ekler
+/**
+ * =============================================
+ * SECURED PAYMENT API - ALL LAYERS INTEGRATED
+ * =============================================
+ * Example implementation of comprehensive security
+ */
 
-import prisma from '../../../../lib/prisma'; // <<< YOLU KONTROL ET! (Ana dizinden 4 seviye yukarı)
-import { Prisma } from '@prisma/client';
+import { secureAPI } from '../../../../lib/api-security.js';
+import { withPrismaSecurity } from '../../../../lib/prisma-security.js';
+import { PERMISSIONS } from '../../../../lib/rbac-enhanced.js';
+import { auditLog } from '../../../../lib/audit-logger.js';
+import { validateInput } from '../../../../lib/validation.js';
 
-export default async function handler(req, res) {
-    // CORS ve OPTIONS Handling
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); // Sadece POST
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') { return res.status(200).end(); }
+/**
+ * Payment API Handler with Full Security Integration
+ */
+async function paymentHandler(req, res) {
+    const { method } = req;
+    const { id: siparisId } = req.query;
 
-    // Sipariş ID'sini al ve doğrula
-    const siparisIdQueryParam = req.query.id;
-    const siparisId = parseInt(siparisIdQueryParam);
-    if (isNaN(siparisId)) { return res.status(400).json({ message: 'Geçersiz Sipariş ID.' }); }
-
-    // Sadece POST isteklerini işle
-    if (req.method === 'POST') {
-        console.log(`POST /api/siparis/${siparisId}/odemeler isteği alındı. Body:`, req.body);
-        const { tutar, odemeTarihi, odemeYontemi, aciklama } = req.body;
-
-        // Gerekli alan kontrolü
-        if (tutar === undefined || tutar === null || typeof tutar !== 'number' || tutar <= 0) {
-            return res.status(400).json({ message: 'Geçerli bir ödeme tutarı girilmelidir.' });
+    try {
+        switch (method) {
+            case 'GET':
+                return await getPayments(req, res, siparisId);
+            case 'POST':
+                return await createPayment(req, res, siparisId);
+            case 'PUT':
+                return await updatePayment(req, res, siparisId);
+            default:
+                res.setHeader('Allow', ['GET', 'POST', 'PUT']);
+                return res.status(405).json({
+                    error: 'Method not allowed',
+                    allowed: ['GET', 'POST', 'PUT']
+                });
         }
+    } catch (error) {
+        console.error('Payment API Error:', error);
 
-        // Ödeme yöntemi değer dönüştürme (Frontend -> Prisma Enum)
-        const odemeYontemiMap = {
-            'Nakit': 'NAKIT',
-            'NAKIT': 'NAKIT',
-            'Kredi Kartı': 'KREDI_KARTI',
-            'KREDI_KARTI': 'KREDI_KARTI',
-            'Cari': 'CARI',
-            'CARI': 'CARI',
-            'Çek': 'CEK',
-            'CEK': 'CEK',
-            'Banka Havalesi': 'BANKA_HAVALESI',
-            'BANKA_HAVALESI': 'BANKA_HAVALESI',
-            'İkram': 'IKRAM',
-            'IKRAM': 'IKRAM'
-        };
+        auditLog('PAYMENT_API_ERROR', 'Payment API operation failed', {
+            userId: req.user?.userId,
+            siparisId,
+            method,
+            error: error.message
+        });
 
-        const validOdemeYontemi = odemeYontemiMap[odemeYontemi] || 'NAKIT';
-        console.log(`Ödeme yöntemi dönüştürme: "${odemeYontemi}" -> "${validOdemeYontemi}"`);
+        return res.status(500).json({
+            error: 'Payment operation failed',
+            code: 'PAYMENT_ERROR'
+        });
+    }
+}
 
-        try {
-            // Önce siparişi çek ve müşteri ID'sini al
-            const siparis = await prisma.siparis.findUnique({
-                where: { id: siparisId },
-                select: { cariId: true, tarih: true }
-            });
-
-            if (!siparis) {
-                return res.status(404).json({ message: 'Sipariş bulunamadı.' });
-            }
-
-            if (!siparis.cariId) {
-                return res.status(400).json({ message: 'Bu siparişin müşteri bilgisi eksik.' });
-            }
-
-            // Ödeme tarihini işle (gelmezse şimdiki zaman)
-            let odemeTarihiDate = new Date();
-            if (odemeTarihi) {
-                odemeTarihiDate = new Date(odemeTarihi);
-                if (isNaN(odemeTarihiDate.getTime())) {
-                    throw new Error('Geçersiz ödeme tarihi formatı.');
+/**
+ * Get Payments for Order
+ */
+async function getPayments(req, res, siparisId) {
+    // Database query with security context
+    const payments = await req.prisma.secureQuery('odeme', 'findMany', {
+        where: {
+            siparisId: parseInt(siparisId)
+        },
+        include: {
+            odemeYontemi: true,
+            siparis: {
+                select: {
+                    id: true,
+                    siparisTarihi: true,
+                    toplamTutar: true,
+                    durum: true
                 }
             }
-
-            // Yeni ödemeyi veritabanına ekle
-            const yeniOdeme = await prisma.cariOdeme.create({
-                data: {
-                    cariId: siparis.cariId,  // Müşteri ID'si zorunlu!
-                    siparisId: siparisId,
-                    tutar: tutar,
-                    odemeTarihi: odemeTarihiDate,
-                    odemeYontemi: validOdemeYontemi,  // Dönüştürülmüş değer
-                    aciklama: aciklama || null,
-                }
-            });
-
-            console.log(`Sipariş ${siparisId} için yeni ödeme kaydedildi: ID ${yeniOdeme.id}`);
-            // Başarılı yanıtı gönder (201 Created)
-            return res.status(201).json(yeniOdeme);
-
-        } catch (error) {
-            console.error(`❌ POST /api/siparis/${siparisId}/odemeler HATA:`, error);
-            let statusCode = 500;
-            let message = 'Ödeme kaydedilirken bir hata oluştu.';
-            if (error.message.includes('Geçersiz ödeme tarihi')) { statusCode = 400; message = error.message; }
-            else if (error instanceof Prisma.PrismaClientKnownRequestError) {
-                if (error.code === 'P2003') { // Foreign key constraint (siparisId bulunamadı?)
-                    statusCode = 404; message = 'Ödeme eklenecek sipariş bulunamadı.';
-                } else { message = `Veritabanı hatası: ${error.code}.`; }
-            }
-            return res.status(statusCode).json({ message: message, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+        },
+        orderBy: {
+            odemeTarihi: 'desc'
         }
+    });
+
+    auditLog('PAYMENT_VIEW', 'Payment records accessed', {
+        userId: req.user.userId,
+        siparisId,
+        paymentCount: payments.length
+    });
+
+    return res.status(200).json({
+        success: true,
+        payments
+    });
+}
+
+/**
+ * Create New Payment
+ */
+async function createPayment(req, res, siparisId) {
+    // Input validation with security checks
+    const validationResult = validateInput(req.body, {
+        requiredFields: ['miktar', 'odemeYontemiId'],
+        allowedFields: ['miktar', 'odemeYontemiId', 'aciklama', 'referansNo'],
+        requireSanitization: true
+    });
+
+    if (!validationResult.isValid) {
+        return res.status(400).json({
+            error: 'Invalid payment data',
+            details: validationResult.errors
+        });
     }
 
-    // Desteklenmeyen metot
-    console.log(`Desteklenmeyen metot: ${req.method} for /api/siparis/${siparisId}/odemeler`);
-    res.setHeader('Allow', ['POST', 'OPTIONS']);
-    return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
+    const { miktar, odemeYontemiId, aciklama, referansNo } = req.body;
+
+    // Business logic validation
+    if (!miktar || miktar <= 0) {
+        return res.status(400).json({
+            error: 'Payment amount must be greater than 0'
+        });
+    }
+
+    // Secure transaction with enhanced logging
+    const result = await req.prisma.secureTransaction(async (tx) => {
+        // 1. Get order details
+        const siparis = await tx.secureQuery('siparisFormu', 'findUnique', {
+            where: { id: parseInt(siparisId) },
+            include: {
+                cari: {
+                    select: {
+                        id: true,
+                        ad: true,
+                        telefon: true,
+                        email: true
+                    }
+                }
+            }
+        });
+
+        if (!siparis) {
+            throw new Error('Order not found');
+        }
+
+        // 2. Create customer if missing (enhanced security)
+        let cariMusteri = siparis.cari;
+        if (!cariMusteri && siparis.musteriAd) {
+            cariMusteri = await tx.secureQuery('cariMusteri', 'create', {
+                data: {
+                    ad: siparis.musteriAd,
+                    telefon: siparis.musteriTelefon || '',
+                    email: siparis.musteriEmail || '',
+                    adres: siparis.musteriAdres || '',
+                    sehir: siparis.musteriSehir || '',
+                    aktif: true
+                }
+            }, 'CUSTOMER_AUTO_CREATED');
+
+            // Link customer to order
+            await tx.secureQuery('siparisFormu', 'update', {
+                where: { id: parseInt(siparisId) },
+                data: { musteriId: cariMusteri.id }
+            }, 'ORDER_CUSTOMER_LINKED');
+        }
+
+        // 3. Calculate payment totals
+        const existingPayments = await tx.secureQuery('odeme', 'findMany', {
+            where: { siparisId: parseInt(siparisId) }
+        });
+
+        const totalPaid = existingPayments.reduce((sum, payment) => sum + payment.miktar, 0);
+        const newTotal = totalPaid + parseFloat(miktar);
+
+        if (newTotal > siparis.toplamTutar) {
+            throw new Error('Payment amount exceeds order total');
+        }
+
+        // 4. Create payment record
+        const payment = await tx.secureQuery('odeme', 'create', {
+            data: {
+                siparisId: parseInt(siparisId),
+                miktar: parseFloat(miktar),
+                odemeYontemiId: parseInt(odemeYontemiId),
+                odemeTarihi: new Date(),
+                aciklama: aciklama || '',
+                referansNo: referansNo || '',
+                durum: 'tamamlandi'
+            }
+        }, 'PAYMENT_CREATED');
+
+        // 5. Update order status if fully paid
+        const isFullyPaid = newTotal >= siparis.toplamTutar;
+        if (isFullyPaid && siparis.durum !== 'odeme_tamamlandi') {
+            await tx.secureQuery('siparisFormu', 'update', {
+                where: { id: parseInt(siparisId) },
+                data: {
+                    durum: 'odeme_tamamlandi',
+                    odemeDurumu: 'tamamlandi'
+                }
+            }, 'ORDER_PAYMENT_COMPLETED');
+        }
+
+        return {
+            payment,
+            order: siparis,
+            customer: cariMusteri,
+            totalPaid: newTotal,
+            isFullyPaid
+        };
+    });
+
+    // Enhanced audit logging
+    auditLog('PAYMENT_CREATED', 'New payment created', {
+        userId: req.user.userId,
+        siparisId,
+        paymentId: result.payment.id,
+        amount: miktar,
+        paymentMethod: odemeYontemiId,
+        customerCreated: !!result.customer,
+        isFullyPaid: result.isFullyPaid
+    });
+
+    return res.status(201).json({
+        success: true,
+        message: 'Payment saved successfully',
+        payment: result.payment,
+        totalPaid: result.totalPaid,
+        isFullyPaid: result.isFullyPaid
+    });
 }
+
+/**
+ * Update Payment
+ */
+async function updatePayment(req, res, siparisId) {
+    const { paymentId } = req.body;
+
+    if (!paymentId) {
+        return res.status(400).json({
+            error: 'Payment ID is required'
+        });
+    }
+
+    // Input validation
+    const validationResult = validateInput(req.body, {
+        allowedFields: ['paymentId', 'miktar', 'aciklama', 'durum'],
+        requireSanitization: true
+    });
+
+    if (!validationResult.isValid) {
+        return res.status(400).json({
+            error: 'Invalid update data',
+            details: validationResult.errors
+        });
+    }
+
+    const updateData = {};
+    if (req.body.miktar) updateData.miktar = parseFloat(req.body.miktar);
+    if (req.body.aciklama) updateData.aciklama = req.body.aciklama;
+    if (req.body.durum) updateData.durum = req.body.durum;
+
+    // Update with security context
+    const updatedPayment = await req.prisma.secureQuery('odeme', 'update', {
+        where: {
+            id: parseInt(paymentId),
+            siparisId: parseInt(siparisId) // Ensure payment belongs to this order
+        },
+        data: updateData
+    }, 'PAYMENT_UPDATED');
+
+    auditLog('PAYMENT_UPDATED', 'Payment record updated', {
+        userId: req.user.userId,
+        siparisId,
+        paymentId,
+        changes: Object.keys(updateData)
+    });
+
+    return res.status(200).json({
+        success: true,
+        message: 'Payment updated successfully',
+        payment: updatedPayment
+    });
+}
+
+// ===== SECURITY INTEGRATION =====
+// Layer 1-6: Basic security (handled by middleware)
+// Layer 7-8: RBAC with payment permissions
+// Layer 9: API security with input validation  
+// Layer 10: Prisma security with audit logging
+
+export default secureAPI(
+    withPrismaSecurity(paymentHandler),
+    {
+        // RBAC Configuration
+        permission: PERMISSIONS.MANAGE_PAYMENTS,
+
+        // Input Validation Configuration
+        allowedFields: ['miktar', 'odemeYontemiId', 'aciklama', 'referansNo', 'paymentId', 'durum'],
+        requiredFields: {
+            POST: ['miktar', 'odemeYontemiId'],
+            PUT: ['paymentId']
+        },
+
+        // Security Options
+        preventSQLInjection: true,
+        enableAuditLogging: true
+    }
+);

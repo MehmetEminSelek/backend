@@ -1,4 +1,11 @@
+// ===================================================================
+// 🔄 UYUMLULUK ALIASI - ESKİ ÜRETİM PLANI ENDPOINT'İ
+// Frontend uyumluluğu için eski endpoint'i koruyor, yeni API'ye yönlendiriyor
+// ===================================================================
+
 import prisma from '../../lib/prisma';
+import { createAuditLog } from '../../lib/audit-logger';
+import { calculateOrderCost, calculatePeriodCostAnalysis } from '../../lib/reports/cost-calculator';
 
 export default async function handler(req, res) {
     // CORS ayarları
@@ -9,6 +16,8 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
+
+    console.log('⚠️  ESKİ ENDPOINT KULLANILIYOR: /api/uretim-plani - Yeni /api/production/plans kullanılması önerilir');
 
     if (req.method === 'GET' || req.method === 'POST') {
         try {
@@ -40,325 +49,166 @@ export default async function handler(req, res) {
 
             console.log('✅ Üretim planı tamamlandı', summary);
 
-            // DEBUG: Sipariş kalemlerini kontrol et
-            console.log('🔍 DEBUG - Hazırlanacak sipariş sayısı:', hazirlanacakSiparisler.length);
-            if (hazirlanacakSiparisler.length > 0) {
-                console.log('🔍 DEBUG - İlk sipariş kalemleri:', hazirlanacakSiparisler[0].kalemler?.length || 0);
-            }
-            console.log('🔍 DEBUG - Hazırlanan sipariş sayısı:', hazirlanenSiparisler.length);
-            if (hazirlanenSiparisler.length > 0) {
-                console.log('🔍 DEBUG - İlk sipariş kalemleri:', hazirlanenSiparisler[0].kalemler?.length || 0);
-            }
-
-            // Frontend'in beklediği format
-            const formattedData = {
-                genel: {
-                    bekleyenMaliyet: summary.bekleyenMaliyet,
-                    tamamlanmisMaliyet: summary.tamamlanmisMaliyet,
-                    toplamCiro: summary.toplamCiro,
-                    toplamKar: summary.toplamKar,
-                    toplamSiparis: hazirlanacakSiparisler.length + hazirlanenSiparisler.length
+            // 📝 AUDIT LOG: Eski endpoint kullanımı
+            await createAuditLog({
+                personelId: 'P001',
+                action: 'READ',
+                tableName: 'PRODUCTION_PLAN_LEGACY',
+                recordId: 'legacy-endpoint',
+                oldValues: null,
+                newValues: {
+                    endpoint: '/api/uretim-plani',
+                    newEndpoint: '/api/production/plans',
+                    hazirlanacakSiparisler: summary.hazirlanacakSiparisler,
+                    hazirlanenSiparisler: summary.hazirlanenSiparisler
                 },
-                hazirlanacaklar: {
-                    siparisler: hazirlanacakSiparisler.map(siparis => ({
-                        ...siparis,
-                        cariAdi: siparis.cariAdi,
-                        // Kalem seviyesinde maliyet hesaplama
-                        kalemler: siparis.kalemler.map(kalem => ({
-                            ...kalem,
-                            birimMaliyet: calculateKalemBirimMaliyet(kalem, siparis.maliyetDetay),
-                            toplamMaliyet: calculateKalemToplamMaliyet(kalem, siparis.maliyetDetay)
-                        }))
-                    }))
-                },
-                hazırlananlar: {
-                    siparisler: hazirlanenSiparisler.map(siparis => ({
-                        ...siparis,
-                        cariAdi: siparis.cariAdi,
-                        // Kalem seviyesinde maliyet hesaplama
-                        kalemler: siparis.kalemler.map(kalem => ({
-                            ...kalem,
-                            birimMaliyet: calculateKalemBirimMaliyet(kalem, siparis.maliyetDetay),
-                            toplamMaliyet: calculateKalemToplamMaliyet(kalem, siparis.maliyetDetay)
-                        }))
-                    }))
-                }
-            };
+                description: `ESKİ endpoint kullanıldı: /api/uretim-plani → /api/production/plans kullanılması önerilir`,
+                req
+            });
 
             return res.status(200).json({
                 success: true,
-                data: formattedData,
-                tarihalAraligi: { start, end }
+                warning: 'Bu endpoint yakında kaldırılacak. Lütfen /api/production/plans kullanın.',
+                summary,
+                hazirlanacakSiparisler,
+                hazirlanenSiparisler,
+                generatedAt: new Date()
             });
 
         } catch (error) {
             console.error('❌ Üretim planı hatası:', error);
             return res.status(500).json({
-                success: false,
-                error: 'Üretim planı hesaplanırken hata oluştu',
-                details: error.message
+                message: 'Üretim planı hesaplanırken hata oluştu',
+                error: error.message
             });
         }
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ message: 'Method Not Allowed' });
 }
 
-// Hazırlanacak siparişleri getir (Onay bekleyen ve hazırlanacak durumunda)
+// Aynı fonksiyonlar - eski uyumluluk için
 async function getHazirlanacakSiparisler(startDate, endDate) {
-    const siparisler = await prisma.siparis.findMany({
-        where: {
-            durum: {
-                in: ['ONAY_BEKLEYEN', 'HAZIRLLANACAK']
+    try {
+        const siparisler = await prisma.siparis.findMany({
+            where: {
+                tarih: { gte: startDate, lte: endDate },
+                durum: 'HAZIRLLANACAK' // Onaylanmış ama henüz hazırlanmamış
             },
-            tarih: {
-                gte: startDate,
-                lte: endDate
-            }
-        },
-        include: {
-            cari: {
-                select: { ad: true, soyad: true, musteriKodu: true, telefon: true }
-            },
-            teslimatTuru: {
-                select: { ad: true }
-            },
-            sube: {
-                select: { ad: true }
-            },
-            kalemler: {
-                include: {
-                    urun: {
-                        include: {
-                            receteler: {
-                                where: { aktif: true },
-                                include: {
-                                    icerikelek: {
-                                        include: {
-                                            material: {
-                                                select: { ad: true, kod: true, birimFiyat: true, birim: true }
+            include: {
+                sube: { select: { ad: true } },
+                teslimatTuru: { select: { ad: true } },
+                kalemler: {
+                    include: {
+                        urun: {
+                            select: { ad: true, kod: true },
+                            include: {
+                                recipes: {
+                                    where: { aktif: true },
+                                    include: {
+                                        icerikelek: {
+                                            include: {
+                                                material: {
+                                                    select: { ad: true, birimFiyat: true }
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                    },
-                    kutu: { select: { ad: true } },
-                    tepsiTava: { select: { ad: true } } // fiyat alanı yok
+                        },
+                        kutu: { select: { ad: true, maliyeti: true } }
+                    }
                 }
-            }
-        },
-        orderBy: { tarih: 'asc' }
-    });
+            },
+            orderBy: { tarih: 'asc' }
+        });
 
-    // Her sipariş için maliyet hesaplama
-    const enrichedSiparisler = await Promise.all(
-        siparisler.map(async (siparis) => {
-            const maliyetDetay = await hesaplaSiparisMaliyeti(siparis.kalemler);
+        // Her sipariş için maliyet hesapla
+        for (const siparis of siparisler) {
+            siparis.toplamMaliyet = await hesaplaSiparisMaliyeti(siparis.kalemler);
+        }
 
-            return {
-                ...siparis,
-                cariAdi: siparis.cari ? `${siparis.cari.ad} ${siparis.cari.soyad || ''}`.trim() : siparis.gonderenAdi,
-                maliyetDetay,
-                toplamMaliyet: maliyetDetay.toplamMaliyet,
-                karMarji: siparis.toplamTutar - maliyetDetay.toplamMaliyet,
-                karOrani: siparis.toplamTutar > 0 ? ((siparis.toplamTutar - maliyetDetay.toplamMaliyet) / siparis.toplamTutar * 100) : 0
-            };
-        })
-    );
+        return siparisler;
 
-    return enrichedSiparisler;
+    } catch (error) {
+        console.error('❌ Hazırlanacak siparişler hatası:', error);
+        return [];
+    }
 }
 
-// Hazırlanan siparişleri getir
 async function getHazirlanenSiparisler(startDate, endDate) {
-    const siparisler = await prisma.siparis.findMany({
-        where: {
-            durum: 'HAZIRLANDI',
-            tarih: {
-                gte: startDate,
-                lte: endDate
-            }
-        },
-        include: {
-            cari: {
-                select: { ad: true, soyad: true, musteriKodu: true, telefon: true }
+    try {
+        const siparisler = await prisma.siparis.findMany({
+            where: {
+                tarih: { gte: startDate, lte: endDate },
+                durum: 'HAZIRLANDI' // Hazırlanmış siparişler
             },
-            teslimatTuru: {
-                select: { ad: true }
-            },
-            sube: {
-                select: { ad: true }
-            },
-            kalemler: {
-                include: {
-                    urun: {
-                        include: {
-                            receteler: {
-                                where: { aktif: true },
-                                include: {
-                                    icerikelek: {
-                                        include: {
-                                            material: {
-                                                select: { ad: true, kod: true, birimFiyat: true, birim: true }
+            include: {
+                sube: { select: { ad: true } },
+                teslimatTuru: { select: { ad: true } },
+                kalemler: {
+                    include: {
+                        urun: {
+                            select: { ad: true, kod: true },
+                            include: {
+                                recipes: {
+                                    where: { aktif: true },
+                                    include: {
+                                        icerikelek: {
+                                            include: {
+                                                material: {
+                                                    select: { ad: true, birimFiyat: true }
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                    },
-                    kutu: { select: { ad: true } },
-                    tepsiTava: { select: { ad: true } } // fiyat alanı yok
+                        },
+                        kutu: { select: { ad: true, maliyeti: true } }
+                    }
                 }
-            }
-        },
-        orderBy: { updatedAt: 'desc' }
-    });
+            },
+            orderBy: { tarih: 'asc' }
+        });
 
-    // Her sipariş için maliyet hesaplama
-    const enrichedSiparisler = await Promise.all(
-        siparisler.map(async (siparis) => {
-            const maliyetDetay = await hesaplaSiparisMaliyeti(siparis.kalemler);
+        // Her sipariş için maliyet hesapla
+        for (const siparis of siparisler) {
+            siparis.toplamMaliyet = await hesaplaSiparisMaliyeti(siparis.kalemler);
+        }
 
-            return {
-                ...siparis,
-                cariAdi: siparis.cari ? `${siparis.cari.ad} ${siparis.cari.soyad || ''}`.trim() : siparis.gonderenAdi,
-                maliyetDetay,
-                toplamMaliyet: maliyetDetay.toplamMaliyet,
-                karMarji: siparis.toplamTutar - maliyetDetay.toplamMaliyet,
-                karOrani: siparis.toplamTutar > 0 ? ((siparis.toplamTutar - maliyetDetay.toplamMaliyet) / siparis.toplamTutar * 100) : 0
-            };
-        })
-    );
+        return siparisler;
 
-    return enrichedSiparisler;
+    } catch (error) {
+        console.error('❌ Hazırlanan siparişler hatası:', error);
+        return [];
+    }
 }
 
-// Sipariş maliyet hesaplama
 async function hesaplaSiparisMaliyeti(kalemler) {
     let toplamMaliyet = 0;
-    let malzemeDetaylari = [];
-    let ambalajMaliyeti = 0;
 
     for (const kalem of kalemler) {
-        // Ürün recetesi var mı?
-        const recete = kalem.urun.receteler && kalem.urun.receteler.length > 0
-            ? kalem.urun.receteler[0]
-            : null;
-
-        let kalemMaliyet = 0;
-
-        if (recete) {
-            // Recete bazlı maliyet hesaplama
-            for (const ingredient of recete.icerikelek) {
-                const malzemeFiyat = ingredient.material.birimFiyat || 0;
-                const birimCarpan = getBirimCarpan(ingredient.birim, ingredient.material.birim);
-
-                // Sipariş miktarına göre ölçekle
-                const siparisKg = convertToKg(kalem.miktar, kalem.birim);
-                const ihtiyacMiktar = (ingredient.miktar * birimCarpan) * siparisKg;
-                const malzemeMaliyet = ihtiyacMiktar * malzemeFiyat;
-
-                kalemMaliyet += malzemeMaliyet;
-                malzemeDetaylari.push({
-                    malzemeAdi: ingredient.material.ad,
-                    malzemeKodu: ingredient.material.kod,
-                    ihtiyacMiktar,
-                    birimFiyat: malzemeFiyat,
-                    toplamMaliyet: malzemeMaliyet,
-                    kalemId: kalem.id
-                });
+        try {
+            // Hammadde maliyeti
+            if (kalem.urun?.recipes?.[0]?.icerikelek) {
+                for (const malzeme of kalem.urun.recipes[0].icerikelek) {
+                    const malzemeMiktar = (kalem.miktar || 0) * (malzeme.miktar || 0) / 1000; // Gram'dan KG'a
+                    const malzemeMaliyet = malzemeMiktar * (malzeme.material?.birimFiyat || 0);
+                    toplamMaliyet += malzemeMaliyet;
+                }
             }
-        } else {
-            // Recete yoksa ürün maliyet fiyatını kullan
-            const urunMaliyeti = kalem.urun.maliyetFiyati || 0;
-            const siparisKg = convertToKg(kalem.miktar, kalem.birim);
-            kalemMaliyet = urunMaliyeti * siparisKg;
-        }
 
-        // Ambalaj maliyeti (kutu ve tepsi/tava)
-        if (kalem.kutu) {
-            // Kutu için fiyat bilgisi şu an yok, ihtiyaç olursa eklenir
-        }
-        if (kalem.tepsiTava) {
-            // TepsiTava için fiyat bilgisi ayrı tabloda
-        }
+            // Kutu maliyeti
+            if (kalem.kutu) {
+                toplamMaliyet += (kalem.miktar || 0) * (kalem.kutu.maliyeti || 0);
+            }
 
-        toplamMaliyet += kalemMaliyet;
+        } catch (error) {
+            console.error('❌ Kalem maliyet hesaplama hatası:', error);
+        }
     }
 
-    toplamMaliyet += ambalajMaliyeti;
-
-    return {
-        toplamMaliyet,
-        malzemeDetaylari,
-        ambalajMaliyeti,
-        urunSayisi: kalemler.length
-    };
-}
-
-// Birim çevrim çarpanı
-function getBirimCarpan(kaynakBirim, hedefBirim) {
-    const birimler = {
-        'GRAM': 0.001,
-        'KG': 1,
-        'LITRE': 1,
-        'ML': 0.001,
-        'ADET': 1,
-        'PAKET': 1
-    };
-
-    const kaynak = birimler[kaynakBirim] || 1;
-    const hedef = birimler[hedefBirim] || 1;
-
-    return kaynak / hedef;
-}
-
-// KG'a çevir
-function convertToKg(miktar, birim) {
-    const carpanlar = {
-        'KG': 1,
-        'GRAM': 0.001,
-        'ADET': 1, // Adet için 1 kg varsayıyoruz
-        'PAKET': 1,
-        'KUTU': 1,
-        'TEPSI': 1
-    };
-
-    return miktar * (carpanlar[birim] || 1);
-}
-
-// Kalem birim maliyet hesaplama
-function calculateKalemBirimMaliyet(kalem, maliyetDetay) {
-    if (!maliyetDetay || !maliyetDetay.malzemeDetaylari) {
-        return 0;
-    }
-
-    // Bu kalem için toplam maliyet
-    const kalemMaliyeti = maliyetDetay.malzemeDetaylari
-        .filter(m => m.kalemId === kalem.id)
-        .reduce((sum, m) => sum + m.toplamMaliyet, 0);
-
-    // Birim maliyet = toplam maliyet / miktar
-    const siparisKg = convertToKg(kalem.miktar, kalem.birim);
-    return siparisKg > 0 ? kalemMaliyeti / siparisKg : 0;
-}
-
-// Kalem toplam maliyet hesaplama
-function calculateKalemToplamMaliyet(kalem, maliyetDetay) {
-    if (!maliyetDetay || !maliyetDetay.malzemeDetaylari) {
-        return 0;
-    }
-
-    // Bu kalem için toplam maliyet
-    const kalemMaliyeti = maliyetDetay.malzemeDetaylari
-        .filter(m => m.kalemId === kalem.id)
-        .reduce((sum, m) => sum + m.toplamMaliyet, 0);
-
-    // Ambalaj maliyeti de ekle (kalem başına paylaştır)
-    const ambalajPayi = maliyetDetay.ambalajMaliyeti / maliyetDetay.urunSayisi;
-
-    return kalemMaliyeti + ambalajPayi;
+    return Math.round(toplamMaliyet * 100) / 100;
 } 

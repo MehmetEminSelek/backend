@@ -1,412 +1,571 @@
-// pages/api/siparis/index.js
-// Bu dosya YENİ siparişleri oluşturmak (POST) içindir.
+/**
+ * =============================================
+ * SECURED ORDERS INDEX API - FULL SECURITY INTEGRATION
+ * =============================================
+ */
 
-import prisma from '../../../lib/prisma'; // Prisma Client import yolunu kontrol et
-import { Prisma } from '@prisma/client';
-import { withRBAC, PERMISSIONS } from '../../../lib/rbac'; // Hata tipleri için import
-import { calculateOrderItemPrice } from '../../../lib/fiyat'; // Yeni fiyatlandırma sistemi
+import { secureAPI } from '../../../lib/api-security.js';
+import { withPrismaSecurity } from '../../../lib/prisma-security.js';
+import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
+import { auditLog } from '../../../lib/audit-logger.js';
+import { validateInput } from '../../../lib/validation.js';
+import { calculateOrderItemPrice } from '../../../lib/fiyat.js';
 
-// Safe imports - fallback to no-op functions if not available
-let notifyNewOrder = (data) => {
-    console.log('🔔 Real-time notification (fallback):', data?.orderId || 'unknown');
-};
-let notifyOrderUpdate = (orderId, data) => {
-    console.log('📱 Order update notification (fallback):', orderId);
-};
-let auditLogger = {
-    orderCreated: (id, userId, amount) => {
-        console.log(`📋 Audit Log: Order ${id} created by ${userId}, amount: ${amount}`);
-    },
-    orderStatusChanged: (id, status) => {
-        console.log(`📋 Audit Log: Order ${id} status changed to ${status}`);
-    }
-};
+/**
+ * Orders API Handler with Full Security Integration
+ */
+async function ordersHandler(req, res) {
+    const { method } = req;
 
-// Socket.IO will be implemented later when needed
-console.log('⚠️ Socket.IO real-time features are disabled - using fallback logging');
-
-// Simple performance monitor for this API
-const simplePerformanceMonitor = (handler) => {
-    return async (req, res) => {
-        const start = Date.now();
-        try {
-            const result = await handler(req, res);
-            const duration = Date.now() - start;
-            console.log(`API ${req.url} took ${duration}ms`);
-            return result;
-        } catch (error) {
-            const duration = Date.now() - start;
-            console.log(`API ${req.url} failed after ${duration}ms:`, error.message);
-            throw error;
+    try {
+        switch (method) {
+            case 'GET':
+                return await getOrders(req, res);
+            case 'POST':
+                return await createOrder(req, res);
+            default:
+                res.setHeader('Allow', ['GET', 'POST']);
+                return res.status(405).json({
+                    error: 'Method not allowed',
+                    allowed: ['GET', 'POST']
+                });
         }
-    };
-};
+    } catch (error) {
+        console.error('Orders API Error:', error);
 
-// Yardımcı fonksiyon: Yeni fiyatlandırma sistemini kullanır
-async function calculateOrderPrice(urunId, miktar, birim, tarih) {
-    const result = await calculateOrderItemPrice(urunId, miktar, birim, tarih);
-    return result;
+        auditLog('ORDERS_API_ERROR', 'Orders API operation failed', {
+            userId: req.user?.userId,
+            method,
+            error: error.message
+        });
+
+        return res.status(500).json({
+            error: 'Order operation failed',
+            code: 'ORDERS_ERROR'
+        });
+    }
 }
 
-// Yardımcı fonksiyon: Tepsi/Tava fiyatını bulur - DEVRE DIŞI
-async function getTepsiTavaPrice(tx, tepsiTavaId) {
-    // Şimdilik tepsi/tava fiyatlandırması devre dışı
-    return 0;
-}
+/**
+ * Get Orders List with Advanced Filtering and Security
+ */
+async function getOrders(req, res) {
+    const {
+        page = 1,
+        limit = 50,
+        durum,
+        musteriId,
+        tarihBaslangic,
+        tarihBitis,
+        subeId,
+        search,
+        odemeDurumu,
+        sortBy = 'siparisTarihi',
+        sortOrder = 'desc'
+    } = req.query;
 
-// Yardımcı fonksiyon: Özel tepsi içeriğini sipariş kalemleri olarak hazırla
-async function getOzelTepsiKalemleri(tx, ozelTepsiId) {
-    const ozelTepsi = await tx.ozelTepsi.findUnique({
-        where: { id: ozelTepsiId },
-        include: {
-            icindekiler: {
-                include: { urun: true }
-            }
+    // Input validation
+    const validationResult = validateInput(req.query, {
+        allowedFields: [
+            'page', 'limit', 'durum', 'musteriId', 'tarihBaslangic', 'tarihBitis',
+            'subeId', 'search', 'odemeDurumu', 'sortBy', 'sortOrder'
+        ],
+        requireSanitization: true
+    });
+
+    if (!validationResult.isValid) {
+        return res.status(400).json({
+            error: 'Invalid query parameters',
+            details: validationResult.errors
+        });
+    }
+
+    // Build secure where clause
+    const whereClause = {};
+
+    // Status filtering
+    if (durum) {
+        const validStatuses = ['beklemede', 'onaylandi', 'hazirlaniyor', 'hazir', 'kargoda', 'teslim_edildi', 'iptal'];
+        if (validStatuses.includes(durum)) {
+            whereClause.durum = durum;
+        }
+    }
+
+    // Customer filtering
+    if (musteriId) {
+        whereClause.musteriId = parseInt(musteriId);
+    }
+
+    // Branch filtering
+    if (subeId) {
+        whereClause.subeId = parseInt(subeId);
+    }
+
+    // Payment status filtering
+    if (odemeDurumu) {
+        const validPaymentStatuses = ['bekliyor', 'kismi', 'tamamlandi'];
+        if (validPaymentStatuses.includes(odemeDurumu)) {
+            whereClause.odemeDurumu = odemeDurumu;
+        }
+    }
+
+    // Date range filtering
+    if (tarihBaslangic || tarihBitis) {
+        whereClause.siparisTarihi = {};
+        if (tarihBaslangic) {
+            whereClause.siparisTarihi.gte = new Date(tarihBaslangic);
+        }
+        if (tarihBitis) {
+            whereClause.siparisTarihi.lte = new Date(tarihBitis);
+        }
+    }
+
+    // Search filtering
+    if (search) {
+        whereClause.OR = [
+            { sipariNo: { contains: search, mode: 'insensitive' } },
+            { musteriAd: { contains: search, mode: 'insensitive' } },
+            { musteriTelefon: { contains: search } },
+            { aciklama: { contains: search, mode: 'insensitive' } }
+        ];
+    }
+
+    // Pagination and limits
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
+    const skip = (pageNum - 1) * limitNum;
+
+    // Sorting validation
+    const validSortFields = ['siparisTarihi', 'toplamTutar', 'durum', 'musteriAd', 'olusturmaTarihi'];
+    const validSortOrders = ['asc', 'desc'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'siparisTarihi';
+    const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'desc';
+
+    // Enhanced query with security context
+    const [orders, totalCount] = await Promise.all([
+        req.prisma.secureQuery('siparisFormu', 'findMany', {
+            where: whereClause,
+            select: {
+                id: true,
+                sipariNo: true,
+                siparisTarihi: true,
+                durum: true,
+                odemeDurumu: true,
+                toplamTutar: true,
+                musteriAd: true,
+                musteriTelefon: true,
+                musteriEmail: true,
+                musteriAdres: true,
+                aciklama: true,
+                olusturmaTarihi: true,
+                // Include related data based on user permissions
+                ...(req.user.roleLevel >= 60 && {
+                    maliyetToplami: true,
+                    karMarji: true
+                }),
+                musteri: {
+                    select: {
+                        id: true,
+                        ad: true,
+                        telefon: true,
+                        email: true
+                    }
+                },
+                sube: {
+                    select: {
+                        id: true,
+                        ad: true,
+                        kod: true
+                    }
+                },
+                kalemler: {
+                    select: {
+                        id: true,
+                        miktar: true,
+                        birimFiyat: true,
+                        toplamFiyat: true,
+                        urun: {
+                            select: {
+                                id: true,
+                                ad: true,
+                                kod: true
+                            }
+                        },
+                        kutu: {
+                            select: {
+                                id: true,
+                                ad: true
+                            }
+                        }
+                    }
+                },
+                // Payment info for higher roles
+                ...(req.user.roleLevel >= 50 && {
+                    odemeler: {
+                        select: {
+                            id: true,
+                            miktar: true,
+                            odemeTarihi: true,
+                            odemeYontemi: true
+                        }
+                    }
+                })
+            },
+            orderBy: {
+                [sortField]: sortDirection
+            },
+            skip,
+            take: limitNum
+        }),
+        req.prisma.secureQuery('siparisFormu', 'count', {
+            where: whereClause
+        })
+    ]);
+
+    // Calculate summary statistics for dashboard
+    const ordersSummary = await req.prisma.secureQuery('siparisFormu', 'aggregate', {
+        where: whereClause,
+        _sum: {
+            toplamTutar: true
+        },
+        _count: {
+            id: true
         }
     });
 
-    if (!ozelTepsi) {
-        throw new Error('Özel tepsi bulunamadı');
+    auditLog('ORDERS_VIEW', 'Orders list accessed', {
+        userId: req.user.userId,
+        totalOrders: totalCount,
+        page: pageNum,
+        limit: limitNum,
+        filters: { durum, musteriId, subeId, search, odemeDurumu },
+        userRole: req.user.rol
+    });
+
+    return res.status(200).json({
+        success: true,
+        orders,
+        pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalCount / limitNum),
+            totalItems: totalCount,
+            itemsPerPage: limitNum
+        },
+        summary: {
+            totalAmount: ordersSummary._sum.toplamTutar || 0,
+            totalOrders: ordersSummary._count.id || 0
+        }
+    });
+}
+
+/**
+ * Create New Order with Enhanced Security and Validation
+ */
+async function createOrder(req, res) {
+    // Input validation with security checks
+    const validationResult = validateInput(req.body, {
+        requiredFields: ['musteriAd', 'musteriTelefon', 'kalemler'],
+        allowedFields: [
+            'musteriAd', 'musteriTelefon', 'musteriEmail', 'musteriAdres', 'musteriSehir',
+            'teslimatTarihi', 'teslimatSaati', 'aciklama', 'subeId', 'kalemler',
+            'ozelTalepler', 'indirimTutari', 'indirimSebebi'
+        ],
+        requireSanitization: true
+    });
+
+    if (!validationResult.isValid) {
+        return res.status(400).json({
+            error: 'Invalid order data',
+            details: validationResult.errors
+        });
     }
 
-    // Her ürün için sipariş kalemi oluştur (ambalaj sistemi kaldırıldı)
-    return ozelTepsi.icindekiler.map(icerik => ({
-        urunId: icerik.urunId,
-        miktar: icerik.miktar,
-        birim: 'KG'
-    }));
-}
-
-// Sipariş toplam tutarını hesapla (KDV DAHİL)
-function calculateOrderTotal(siparisKalemleri, toplamTepsiMaliyeti, kargoUcreti, digerHizmetTutari) {
-    const urunToplami = siparisKalemleri.reduce((total, kalem) => {
-        // toplamTutar KDV dahil toplam değerdir
-        const kalemTutari = kalem.toplamTutar || 0;
-        return total + kalemTutari;
-    }, 0);
-
-    return urunToplami + (toplamTepsiMaliyeti || 0) + (kargoUcreti || 0) + (digerHizmetTutari || 0);
-}
-
-async function handlePost(req, res) {
-    console.log('POST /api/siparis isteği alındı. Body:', JSON.stringify(req.body, null, 2));
     const {
-        tarih,
-        teslimatTuruId,
-        subeId,
-        gonderenTipiId,
-        gonderenAdi,
-        gonderenTel,
-        aliciAdi,
-        aliciTel,
-        adres,
+        musteriAd,
+        musteriTelefon,
+        musteriEmail,
+        musteriAdres,
+        musteriSehir,
+        teslimatTarihi,
+        teslimatSaati,
         aciklama,
-        siparisler,
-        ozelTepsiId,
-        kargoUcreti: kargoUcretiStr,
-        digerHizmetTutari: digerHizmetTutariStr,
-        subeNeredenId,  // Şubeden şubeye transfer için
-        subeNereyeId    // Şubeden şubeye transfer için
+        subeId,
+        kalemler,
+        ozelTalepler,
+        indirimTutari = 0,
+        indirimSebebi
     } = req.body;
 
-    if (!tarih || !teslimatTuruId || !gonderenAdi || !gonderenTel ||
-        (!siparisler && !ozelTepsiId) ||
-        (siparisler && !Array.isArray(siparisler)) ||
-        (siparisler && siparisler.length === 0 && !ozelTepsiId)) {
-        console.error('Eksik veya geçersiz veri:', { tarih, teslimatTuruId, gonderenAdi, gonderenTel, siparisler, ozelTepsiId });
-        return res.status(400).json({ message: 'Eksik veya geçersiz veri. Lütfen tüm zorunlu alanları kontrol edin.' });
+    // Business logic validation
+    if (!Array.isArray(kalemler) || kalemler.length === 0) {
+        return res.status(400).json({
+            error: 'Order must contain at least one item'
+        });
     }
 
-    const siparisTarihi = new Date(tarih);
-    if (isNaN(siparisTarihi.getTime())) {
-        return res.status(400).json({ message: 'Geçersiz sipariş tarihi formatı.' });
+    // Validate phone number format (Turkish format)
+    const phoneRegex = /^(\+90|0)?[5][0-9]{9}$/;
+    if (!phoneRegex.test(musteriTelefon.replace(/\s/g, ''))) {
+        return res.status(400).json({
+            error: 'Invalid phone number format'
+        });
     }
-    siparisTarihi.setHours(0, 0, 0, 0); // Sadece tarih kısmı
 
-    const teslimatTuru = await prisma.teslimatTuru.findUnique({ where: { id: parseInt(teslimatTuruId) } });
-    let kargoDurumuToSet = 'ADRESE_TESLIMAT'; // Varsayılan değer
-
-    if (teslimatTuru) {
-        switch (teslimatTuru.kodu) {
-            case 'TT001': // Evine Gönderilecek
-            case 'TT003': // MTN Kargo
-            case 'TT004': // Otobüs
-            case 'TT006': // Yurtiçi Kargo
-                kargoDurumuToSet = 'KARGOYA_VERILECEK';
-                break;
-            case 'TT002': // Şubeden Alacak
-                kargoDurumuToSet = 'SUBEDE_TESLIM';
-                break;
-            case 'TT007': // Şubeye Gönderilecek
-                kargoDurumuToSet = 'SUBEYE_GONDERILECEK';
-                break;
-            case 'TT008': // Şubeden Şubeye (nereden-nereye)
-                kargoDurumuToSet = 'SUBEDEN_SUBEYE';
-                break;
-            default:
-                kargoDurumuToSet = 'ADRESE_TESLIMAT'; // Bilinmeyen durumlar için varsayılan
+    // Validate email if provided
+    if (musteriEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(musteriEmail)) {
+            return res.status(400).json({
+                error: 'Invalid email format'
+            });
         }
     }
 
-    try {
-        const yeniSiparis = await prisma.$transaction(async (tx) => {
-            let siparisKalemleri = [];
-
-            // Eğer özel tepsi seçildiyse, onun içeriğini al
-            if (ozelTepsiId) {
-                siparisKalemleri = await getOzelTepsiKalemleri(tx, parseInt(ozelTepsiId));
-            }
-
-            // Normal siparişleri ekle (eğer varsa)
-            if (siparisler && siparisler.length > 0) {
-                siparisKalemleri = [...siparisKalemleri, ...siparisler];
-            }
-
-            // 1. Toplam Tepsi/Tava Maliyetini Hesapla
-            let hesaplananToplamTepsiMaliyeti = 0;
-            const tepsiTavaIds = siparisKalemleri
-                .map(pkg => pkg.tepsiTavaId) // Gelen payload'daki anahtar adı büyük harfle başlıyor olabilir
-                .filter(id => id != null)
-                .map(id => parseInt(id));
-
-            // Tepsi/Tava fiyat hesaplamalarını şimdilik devre dışı bırak
-            // Yeni fiyatlandırma sistemi henüz tamamen entegre edilmedi
-            hesaplananToplamTepsiMaliyeti = 0;
-            console.log("Tepsi/Tava fiyatlandırması geçici olarak devre dışı - Toplam: 0");
-            console.log("Hesaplanan Toplam Tepsi Maliyeti:", hesaplananToplamTepsiMaliyeti);
-
-            // 2. Ana Sipariş kaydını oluştur
-            const olusturulanSiparis = await tx.siparis.create({
-                data: {
-                    tarih: siparisTarihi,
-                    teslimatTuruId: parseInt(teslimatTuruId),
-                    subeId: subeId ? parseInt(subeId) : null,
-                    // gonderenTipiId alanı schema'da yok, bu sadece frontend UI logic için kullanılıyor
-                    gonderenAdi,
-                    gonderenTel,
-                    aliciAdi: aliciAdi || null,
-                    aliciTel: aliciTel || null,
-                    teslimatAdresi: adres || null,  // schema'da adres değil teslimatAdresi var
-                    siparisNotu: aciklama || null,  // schema'da aciklama değil siparisNotu var
-                    kargoUcreti: kargoUcretiStr ? parseFloat(kargoUcretiStr) : 0,
-                    digerHizmetTutari: digerHizmetTutariStr ? parseFloat(digerHizmetTutariStr) : 0,
-                    kargoDurumu: kargoDurumuToSet, // Düzeltilmiş enum değeri
-                    // subeNeredenId ve subeNereyeId geçici olarak devre dışı
-                    // onaylandiMi varsayılan olarak false olacak
-                },
+    // Validate order items
+    for (const kalem of kalemler) {
+        if (!kalem.urunId || !kalem.miktar || kalem.miktar <= 0) {
+            return res.status(400).json({
+                error: 'Each order item must have valid product ID and quantity'
             });
-            console.log(`Ana sipariş oluşturuldu: ID ${olusturulanSiparis.id}`);
+        }
+    }
 
-            // 3. Sipariş Kalemlerini Oluştur (Birim Fiyatlarını Hesaplayarak)
-            let toplamEklenenKalem = 0;
-            const processedKalemler = [];
+    // Enhanced transaction for order creation
+    const result = await req.prisma.secureTransaction(async (tx) => {
+        // 1. Find or create customer
+        let musteri = null;
 
-            for (const kalem of siparisKalemleri) {
-                if (!kalem.urunId || !kalem.miktar || !kalem.birim) {
-                    console.warn(`Sipariş ${olusturulanSiparis.id}, Kalem (Tepsi/Kutu ID: ${kalem.tepsiTavaId || kalem.kutuId}) içinde eksik ürün bilgisi atlandı:`, kalem);
-                    continue; // Eksik bilgili ürünü atla
+        // Check if customer exists by phone
+        const existingCustomer = await tx.secureQuery('cariMusteri', 'findFirst', {
+            where: {
+                telefon: musteriTelefon,
+                aktif: true
+            }
+        });
+
+        if (existingCustomer) {
+            musteri = existingCustomer;
+
+            // Update customer info if different
+            if (existingCustomer.ad !== musteriAd ||
+                existingCustomer.email !== musteriEmail ||
+                existingCustomer.adres !== musteriAdres) {
+
+                musteri = await tx.secureQuery('cariMusteri', 'update', {
+                    where: { id: existingCustomer.id },
+                    data: {
+                        ad: musteriAd,
+                        email: musteriEmail || existingCustomer.email,
+                        adres: musteriAdres || existingCustomer.adres,
+                        sehir: musteriSehir || existingCustomer.sehir
+                    }
+                }, 'CUSTOMER_UPDATED');
+            }
+        } else {
+            // Create new customer
+            musteri = await tx.secureQuery('cariMusteri', 'create', {
+                data: {
+                    ad: musteriAd,
+                    telefon: musteriTelefon,
+                    email: musteriEmail || '',
+                    adres: musteriAdres || '',
+                    sehir: musteriSehir || '',
+                    musteriKodu: `AUTO-${Date.now()}`,
+                    tipi: 'MUSTERI',
+                    aktif: true
                 }
+            }, 'CUSTOMER_CREATED');
+        }
 
-                const urunId = parseInt(kalem.urunId);
-                const birim = kalem.birim.toUpperCase();
-                const miktar = parseFloat(kalem.miktar);
+        // 2. Generate order number
+        const orderCount = await tx.secureQuery('siparisFormu', 'count', {});
+        const sipariNo = `SP-${new Date().getFullYear()}-${String(orderCount + 1).padStart(5, '0')}`;
 
-                // Ürün bilgisini al (ad ve kod için)
-                const urun = await tx.urun.findUnique({
-                    where: { id: urunId },
-                    select: { ad: true, kod: true }
-                });
+        // 3. Calculate order totals with security checks
+        let toplamTutar = 0;
+        let maliyetToplami = 0;
+        const processedKalemler = [];
 
-                if (!urun) {
-                    console.warn(`Ürün bulunamadı: urunId=${urunId}`);
-                    continue; // Bu kalemi atla
-                }
+        for (const kalem of kalemler) {
+            // Validate product exists and is active
+            const urun = await tx.secureQuery('urun', 'findUnique', {
+                where: { id: parseInt(kalem.urunId) },
+                select: { id: true, ad: true, aktif: true, kategori: true }
+            });
 
-                // Yeni fiyatlandırma sistemi kullan - KDV dahil
-                const priceResult = await calculateOrderPrice(urunId, miktar, birim, siparisTarihi);
-                const birimFiyat = priceResult.birimFiyat;
-                const araToplam = priceResult.araToplam;
-                const kdvOrani = priceResult.kdvOrani;
-                const kdvTutari = priceResult.kdvTutari;
-                const iskonto = 0; // Şimdilik iskonto yok
-                const toplamTutar = priceResult.toplamFiyat - iskonto;
+            if (!urun || !urun.aktif) {
+                throw new Error(`Product ${kalem.urunId} not found or inactive`);
+            }
 
-                if (birimFiyat === 0) {
-                    console.warn(`!!! Fiyat bulunamadı: urunId=${urunId}, birim=${birim}, tarih=${siparisTarihi.toISOString().split('T')[0]}`);
-                }
+            // Calculate secure pricing
+            const priceResult = await calculateOrderItemPrice(
+                parseInt(kalem.urunId),
+                parseFloat(kalem.miktar),
+                kalem.birim || 'adet',
+                new Date()
+            );
 
-                const siparisKalemi = {
-                    siparisId: olusturulanSiparis.id,
-                    urunId: urunId,
-                    urunAdi: urun.ad,
-                    urunKodu: urun.kod,
-                    miktar: miktar,
-                    birim: birim,
-                    birimFiyat: birimFiyat,
-                    kdvOrani: kdvOrani,
-                    iskonto: iskonto,
-                    araToplam: araToplam,
-                    kdvTutari: kdvTutari,
-                    toplamTutar: toplamTutar,
+            if (!priceResult.success) {
+                throw new Error(`Price calculation failed for product ${kalem.urunId}`);
+            }
+
+            const kalemToplam = priceResult.toplamFiyat;
+            const kalemMaliyet = priceResult.maliyetToplami || 0;
+
+            toplamTutar += kalemToplam;
+            maliyetToplami += kalemMaliyet;
+
+            processedKalemler.push({
+                urunId: parseInt(kalem.urunId),
                     kutuId: kalem.kutuId ? parseInt(kalem.kutuId) : null,
                     tepsiTavaId: kalem.tepsiTavaId ? parseInt(kalem.tepsiTavaId) : null,
-                };
+                miktar: parseFloat(kalem.miktar),
+                birim: kalem.birim || 'adet',
+                birimFiyat: priceResult.birimFiyat,
+                toplamFiyat: kalemToplam,
+                maliyetBirimFiyat: priceResult.maliyetBirimFiyat || 0,
+                maliyetToplam: kalemMaliyet,
+                aciklama: kalem.aciklama || ''
+            });
+        }
 
-                console.log(`Sipariş ${olusturulanSiparis.id} için kalem ekleniyor:`, siparisKalemi);
-                const createdKalem = await tx.siparisKalemi.create({ data: siparisKalemi });
-                processedKalemler.push(createdKalem);
-                toplamEklenenKalem++;
+        // Apply discount if provided and user has permission
+        let finalTotal = toplamTutar;
+        if (indirimTutari > 0) {
+            if (req.user.roleLevel < 70) {
+                throw new Error('Insufficient permissions to apply discounts');
             }
 
-            if (toplamEklenenKalem === 0) { throw new Error("Siparişe eklenecek geçerli ürün bulunamadı."); }
+            if (indirimTutari > toplamTutar * 0.5) {
+                throw new Error('Discount cannot exceed 50% of order total');
+            }
 
-            // Sipariş toplamlarını hesapla ve güncelle
-            const araToplam = processedKalemler.reduce((sum, kalem) => sum + parseFloat(kalem.araToplam || 0), 0);
-            const kdvToplam = processedKalemler.reduce((sum, kalem) => sum + parseFloat(kalem.kdvTutari || 0), 0);
-            const kargoUcretiFloat = parseFloat(kargoUcretiStr || 0);
-            const digerHizmetTutariFloat = parseFloat(digerHizmetTutariStr || 0);
+            if (!indirimSebebi) {
+                throw new Error('Discount reason is required');
+            }
 
-            const toplamTutar = araToplam + kdvToplam + hesaplananToplamTepsiMaliyeti + kargoUcretiFloat + digerHizmetTutariFloat;
+            finalTotal = toplamTutar - parseFloat(indirimTutari);
+        }
 
-            await tx.siparis.update({
-                where: { id: olusturulanSiparis.id },
+        // 4. Create order
+        const newOrder = await tx.secureQuery('siparisFormu', 'create', {
+            data: {
+                sipariNo,
+                siparisTarihi: new Date(),
+                musteriId: musteri.id,
+                musteriAd,
+                musteriTelefon,
+                musteriEmail: musteriEmail || '',
+                musteriAdres: musteriAdres || '',
+                musteriSehir: musteriSehir || '',
+                teslimatTarihi: teslimatTarihi ? new Date(teslimatTarihi) : null,
+                teslimatSaati: teslimatSaati || null,
+                aciklama: aciklama || '',
+                ozelTalepler: ozelTalepler || '',
+                subeId: subeId ? parseInt(subeId) : null,
+                durum: 'beklemede',
+                odemeDurumu: 'bekliyor',
+                toplamTutar: finalTotal,
+                maliyetToplami,
+                karMarji: finalTotal - maliyetToplami,
+                indirimTutari: parseFloat(indirimTutari) || 0,
+                indirimSebebi: indirimSebebi || null,
+                olusturanKullanici: req.user.userId
+            }
+        }, 'ORDER_CREATED');
+
+        // 5. Create order items
+        for (const kalem of processedKalemler) {
+            await tx.secureQuery('siparisKalem', 'create', {
                 data: {
-                    araToplam: araToplam,
-                    kdvToplam: kdvToplam,
-                    toplamTutar: toplamTutar
+                    siparisId: newOrder.id,
+                    ...kalem
                 }
-            });
-
-            // Sonuç olarak güncellenmiş siparişi döndür (kalemler dahil)
-            return tx.siparis.findUnique({
-                where: { id: olusturulanSiparis.id },
-                include: {
-                    kalemler: {
-                        include: {
-                            urun: true,
-                            tepsiTava: true,
-                            kutu: true
-                        }
-                    },
-                    teslimatTuru: true,
-                    sube: true,
-                    subeNereden: true,  // Nereden şube bilgisi
-                    subeNereye: true,   // Nereye şube bilgisi
-                    hedefSube: true     // Hedef şube bilgisi
-                } // Kalemleri de yanıta ekle
-            });
-        }); // Transaction sonu
-
-        // Audit log
-        auditLogger.orderCreated(yeniSiparis.id, req.user?.id || null, yeniSiparis.toplamTutar);
-
-        // Real-time notification
-        notifyNewOrder({
-            orderId: yeniSiparis.id,
-            customerName: yeniSiparis.gonderenAdi,
-            amount: yeniSiparis.toplamTutar,
-            status: 'pending',
-            delivery: yeniSiparis.teslimatTuru?.ad
-        });
-
-        console.log('Sipariş başarıyla kaydedildi:', yeniSiparis);
-        return res.status(201).json(yeniSiparis);
-
-    } catch (error) {
-        console.error('❌ POST /api/siparis HATA:');
-        console.error('Error Message:', error.message);
-        console.error('Error Stack:', error.stack);
-        console.error('Error Type:', error.constructor.name);
-        if (error.code) console.error('Error Code:', error.code);
-
-        let errorMessage = 'Sipariş oluşturulurken bir sunucu hatası oluştu.';
-
-        if (error.message.includes("geçerli ürün bulunamadı")) {
-            errorMessage = error.message;
-        }
-        else if (error instanceof Prisma.PrismaClientValidationError) {
-            console.error('Prisma Validation Error Details:', error.message);
-            errorMessage = `Veri doğrulama hatası: ${error.message}`;
-        }
-        else if (error instanceof Prisma.PrismaClientKnownRequestError) {
-            console.error('Prisma Known Error Details:', error.message, error.meta);
-            errorMessage = `Veritabanı hatası: ${error.code} - ${error.message}`;
-        }
-        else {
-            console.error('Unexpected Error Details:', error);
-            errorMessage = `Beklenmeyen hata: ${error.message}`;
+            }, 'ORDER_ITEM_CREATED');
         }
 
-        return res.status(500).json({
-            message: errorMessage,
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
+        // 6. Stock reservation (if enabled)
+        if (process.env.AUTO_STOCK_RESERVATION === 'true') {
+            for (const kalem of processedKalemler) {
+                await tx.secureQuery('stokHareket', 'create', {
+                    data: {
+                        urunId: kalem.urunId,
+                        hareketTipi: 'REZERVE',
+                        miktar: -kalem.miktar,
+                        referansId: newOrder.id,
+                        referansTip: 'SIPARIS',
+                        aciklama: `Sipariş rezervasyonu: ${sipariNo}`,
+                        olusturanKullanici: req.user.userId
+                    }
+                }, 'STOCK_RESERVED');
+            }
+        }
+
+        return {
+            order: newOrder,
+            customer: musteri,
+            totalItems: processedKalemler.length
+        };
+    });
+
+    // Enhanced audit logging
+    auditLog('ORDER_CREATED', 'New order created', {
+        userId: req.user.userId,
+        orderId: result.order.id,
+        orderNumber: result.order.sipariNo,
+        customerId: result.customer.id,
+        customerName: musteriAd,
+        totalAmount: result.order.toplamTutar,
+        itemCount: result.totalItems,
+        hasDiscount: indirimTutari > 0,
+        discountAmount: indirimTutari
+    });
+
+    return res.status(201).json({
+        success: true,
+        message: 'Order created successfully',
+        order: {
+            id: result.order.id,
+            sipariNo: result.order.sipariNo,
+            siparisTarihi: result.order.siparisTarihi,
+            durum: result.order.durum,
+            toplamTutar: result.order.toplamTutar,
+            musteriAd: result.order.musteriAd,
+            musteriTelefon: result.order.musteriTelefon
+        },
+        customer: {
+            id: result.customer.id,
+            ad: result.customer.ad,
+            telefon: result.customer.telefon
+        }
+    });
 }
 
-async function handleGet(req, res) {
-    try {
-        const where = {};
-        if (req.query.kargoDurumu) {
-            where.kargoDurumu = req.query.kargoDurumu;
-        }
-        if (req.query.onaylandiMi !== undefined) {
-            where.onaylandiMi = req.query.onaylandiMi === 'true';
-        }
-        if (req.query.hazirlanmaDurumu) {
-            where.hazirlanmaDurumu = req.query.hazirlanmaDurumu;
-        }
+// ===== SECURITY INTEGRATION =====
+export default secureAPI(
+    withPrismaSecurity(ordersHandler),
+    {
+        // RBAC Configuration
+        permission: PERMISSIONS.VIEW_ORDERS, // Base permission, individual operations check higher permissions
 
-        const siparisler = await prisma.siparis.findMany({
-            where,
-            orderBy: { tarih: 'desc' },
-            include: {
-                teslimatTuru: true,
-                sube: true,
-                subeNereden: true,  // Nereden şube bilgisi
-                subeNereye: true,   // Nereye şube bilgisi
-                hedefSube: true,    // Hedef şube bilgisi
-                kalemler: { 
-                    include: { 
-                        urun: { select: { id: true, ad: true, kod: true } }, 
-                        tepsiTava: { select: { id: true, ad: true, kod: true } },
-                        kutu: { select: { id: true, ad: true, kod: true } }
-                    } 
-                },
-                odemeler: true,
-            },
-        });
-        res.status(200).json(siparisler);
-    } catch (err) {
-        res.status(500).json({ message: 'Siparişler alınamadı', error: err.message });
+        // Method-specific permissions will be checked in handlers
+        // GET: VIEW_ORDERS
+        // POST: CREATE_ORDERS
+
+        // Input Validation Configuration
+        allowedFields: [
+            'musteriAd', 'musteriTelefon', 'musteriEmail', 'musteriAdres', 'musteriSehir',
+            'teslimatTarihi', 'teslimatSaati', 'aciklama', 'subeId', 'kalemler',
+            'ozelTalepler', 'indirimTutari', 'indirimSebebi',
+            'page', 'limit', 'durum', 'musteriId', 'tarihBaslangic', 'tarihBitis',
+            'search', 'odemeDurumu', 'sortBy', 'sortOrder'
+        ],
+        requiredFields: {
+            POST: ['musteriAd', 'musteriTelefon', 'kalemler']
+        },
+
+        // Security Options
+        preventSQLInjection: true,
+        enableAuditLogging: true
     }
-}
-
-async function handler(req, res) {
-    // CORS ve OPTIONS Handling
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // Sadece GET, POST ve OPTIONS
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-        console.log('OPTIONS /api/siparis isteği yanıtlandı.');
-        return res.status(200).end();
-    }
-
-    // Performance monitoring wrap
-    return simplePerformanceMonitor(async (req, res) => {
-        if (req.method === 'POST') {
-            return handlePost(req, res);
-        } else if (req.method === 'GET') {
-            return handleGet(req, res);
-        } else {
-            console.log(`Desteklenmeyen metot: ${req.method} for /api/siparis`);
-            res.setHeader('Allow', ['GET', 'POST', 'OPTIONS']);
-            return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
-        }
-    })(req, res);
-}
-
-// Export with RBAC protection
-export default withRBAC(handler, {
-    permission: PERMISSIONS.VIEW_ORDERS // Base permission, specific methods will be checked inside
-});
+);
