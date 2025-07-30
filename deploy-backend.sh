@@ -120,9 +120,13 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}❌ Docker Compose kurulu değil! Lütfen önce Docker Compose'u kurun.${NC}"
-    exit 1
+# Modern Docker Compose kontrol
+if ! docker compose version &> /dev/null; then
+    if ! command -v docker-compose &> /dev/null; then
+        echo -e "${RED}❌ Docker Compose kurulu değil! Lütfen önce Docker Compose'u kurun.${NC}"
+        echo "Kurulum için: sudo apt install docker-compose-plugin -y"
+        exit 1
+    fi
 fi
 
 # Docker servis kontrolü
@@ -132,22 +136,28 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+# Docker Compose komut belirleme
+DOCKER_COMPOSE_CMD="docker compose"
+if ! docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+fi
+
 # Mevcut container'ları durdur
 echo "🛑 Mevcut backend container'ları durduruluyor..."
-docker-compose down || true
+$DOCKER_COMPOSE_CMD down || true
 
 # Docker image'ları build et
 echo "🔨 Backend Docker image'ları build ediliyor..."
-docker-compose build --no-cache
+$DOCKER_COMPOSE_CMD build --no-cache
 
 # Database ve Backend servislerini başlat
 echo "🚀 Backend servisleri başlatılıyor..."
-docker-compose up -d database backend nginx
+$DOCKER_COMPOSE_CMD up -d database backend nginx
 
 # Container durumlarını kontrol et
 echo "📊 Container durumları kontrol ediliyor..."
 sleep 15
-docker-compose ps
+$DOCKER_COMPOSE_CMD ps
 
 # Database health check
 echo "🏥 Database health check yapılıyor..."
@@ -192,13 +202,13 @@ echo "   sudo cp /etc/letsencrypt/live/api.ogsiparis.com/fullchain.pem ./certs/"
 echo "   sudo cp /etc/letsencrypt/live/api.ogsiparis.com/privkey.pem ./certs/"
 echo ""
 echo "3. nginx konteynerini yeniden başlatın:"
-echo "   docker-compose restart nginx"
+echo "   $DOCKER_COMPOSE_CMD restart nginx"
 echo ""
 
 # Backup service başlatma hatırlatması
 echo -e "${YELLOW}📌 Backup Service:${NC}"
 echo "Otomatik backup'ı başlatmak için:"
-echo "   docker-compose --profile backup up -d backup"
+echo "   $DOCKER_COMPOSE_CMD --profile backup up -d backup"
 echo ""
 
 echo ""
@@ -212,11 +222,11 @@ echo "   - Database: localhost:5432"
 echo "   - Health Check: http://localhost:3080/health"
 echo ""
 echo "🔧 Yönetim Komutları:"
-echo "   - Logları görüntüle: docker-compose logs -f"
-echo "   - Restart: docker-compose restart"
-echo "   - Durdur: docker-compose down"
-echo "   - Database backup: docker-compose exec backup /backup-script.sh"
-echo "   - Database connect: docker-compose exec database psql -U ogform -d ogformdb"
+echo "   - Logları görüntüle: $DOCKER_COMPOSE_CMD logs -f"
+echo "   - Restart: $DOCKER_COMPOSE_CMD restart"
+echo "   - Durdur: $DOCKER_COMPOSE_CMD down"
+echo "   - Database backup: $DOCKER_COMPOSE_CMD exec backup /backup-script.sh"
+echo "   - Database connect: $DOCKER_COMPOSE_CMD exec database psql -U ogform -d ogformdb"
 echo ""
 echo "🔒 Güvenlik Önerileri:"
 echo "   1. SSL sertifikası kurun"
