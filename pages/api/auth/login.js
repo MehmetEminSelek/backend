@@ -25,18 +25,14 @@ function getClientIP(req) {
 async function logLoginAttempt(kullaniciAdi, ip, success, reason = null, userId = null) {
     try {
         await auditLog({
-            userId: userId,
-            userEmail: kullaniciAdi,
+            personelId: userId || null,
             action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
-            resource: 'AUTH',
-            ip: ip,
-            details: {
-                kullaniciAdi,
-                success,
-                reason,
-                timestamp: new Date().toISOString(),
-                userAgent: null // Will be added from req if available
-            }
+            tableName: 'User',
+            recordId: userId || null,
+            description: `${success ? 'Başarılı' : 'Başarısız'} giriş denemesi: ${kullaniciAdi}${reason ? ` - ${reason}` : ''}`,
+            oldValues: null,
+            newValues: null,
+            req: null
         });
     } catch (error) {
         console.error('❌ Login attempt logging failed:', error);
