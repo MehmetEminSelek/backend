@@ -1054,8 +1054,8 @@ model AuditLog {
   id Int @id @default(autoincrement())
 
   // Kim yaptı?
-  personelId String
-  personel   User   @relation("PersonelAuditLogs", fields: [personelId], references: [personelId])
+  personelId String?
+  personel   User?   @relation("PersonelAuditLogs", fields: [personelId], references: [personelId])
 
   // Neyi yaptı?
   action    AuditAction // CREATE, UPDATE, DELETE, APPROVE, CANCEL, vb.
