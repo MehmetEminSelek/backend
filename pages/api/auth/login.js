@@ -120,7 +120,27 @@ export default async function handler(req, res) {
         // Input validation
         const validationErrors = validateLoginInput(kullaniciAdi, sifre);
         if (validationErrors.length > 0) {
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'VALIDATION_ERROR');
+            // Try to find user for audit log even with validation error
+            let userId = null;
+            try {
+                const normalizedKullaniciAdi = kullaniciAdi?.trim()?.toLowerCase();
+                if (normalizedKullaniciAdi) {
+                    const user = await prisma.user.findFirst({
+                        where: {
+                            OR: [
+                                { email: normalizedKullaniciAdi },
+                                { username: normalizedKullaniciAdi }
+                            ]
+                        },
+                        select: { personelId: true }
+                    });
+                    userId = user?.personelId || null;
+                }
+            } catch (error) {
+                // Ignore user lookup errors for audit log
+            }
+            
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'VALIDATION_ERROR', userId);
             return res.status(400).json({
                 success: false,
                 message: 'Geçersiz giriş bilgileri.',
@@ -134,7 +154,24 @@ export default async function handler(req, res) {
         // Check account lock status
         const lockStatus = await checkAccountLock(normalizedKullaniciAdi);
         if (lockStatus.isLocked) {
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'ACCOUNT_LOCKED');
+            // Try to find user for audit log
+            let userId = null;
+            try {
+                const user = await prisma.user.findFirst({
+                    where: {
+                        OR: [
+                            { email: normalizedKullaniciAdi },
+                            { username: normalizedKullaniciAdi }
+                        ]
+                    },
+                    select: { personelId: true }
+                });
+                userId = user?.personelId || null;
+            } catch (error) {
+                // Ignore user lookup errors for audit log
+            }
+            
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'ACCOUNT_LOCKED', userId);
             return res.status(423).json({
                 success: false,
                 message: `Hesap geçici olarak kilitlendi. ${lockStatus.attemptsCount} başarısız deneme nedeniyle ${ACCOUNT_LOCK_DURATION} dakika bekleyiniz.`,
@@ -165,7 +202,7 @@ export default async function handler(req, res) {
         });
 
         if (!user) {
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'USER_NOT_FOUND');
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'USER_NOT_FOUND', null);
             return res.status(401).json({
                 success: false,
                 message: 'Geçersiz kullanıcı adı veya şifre.'
@@ -275,7 +312,7 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('❌ Login error:', error);
 
-        await logLoginAttempt(req.body?.kullaniciAdi, clientIP, false, 'SERVER_ERROR');
+        await logLoginAttempt(req.body?.kullaniciAdi, clientIP, false, 'SERVER_ERROR', null);
 
         return res.status(500).json({
             success: false,
