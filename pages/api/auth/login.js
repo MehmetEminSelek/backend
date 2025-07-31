@@ -1,7 +1,7 @@
 import prisma from '../../../lib/prisma';
 import bcrypt from 'bcrypt';
 import { generateAccessToken, generateRefreshToken } from '../../../lib/auth.js';
-import { auditLogger } from '../../../lib/audit-logger.js';
+import { auditLog } from '../../../lib/audit-logger.js';
 
 // Security constants from environment
 const FAILED_LOGIN_THRESHOLD = parseInt(process.env.FAILED_LOGIN_THRESHOLD) || 5;
@@ -24,7 +24,7 @@ function getClientIP(req) {
  */
 async function logLoginAttempt(kullaniciAdi, ip, success, reason = null, userId = null) {
     try {
-        await auditLogger.logUserActivity({
+        await auditLog({
             userId: userId,
             userEmail: kullaniciAdi,
             action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
