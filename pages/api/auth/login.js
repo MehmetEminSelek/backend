@@ -261,7 +261,7 @@ export default async function handler(req, res) {
                         { mevcutStok: { lte: 0 } },
                         {
                             AND: [
-                                { kritikSeviye: { not: null } },
+                                { kritikSeviye: { not: { equals: null } } },
                                 { mevcutStok: { lte: 10 } }
                             ]
                         }
