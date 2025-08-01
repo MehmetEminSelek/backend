@@ -47,7 +47,7 @@ async function checkAccountLock(email) {
         // Count failed login attempts in the last lock duration period
         const lockTimeAgo = new Date(Date.now() - (ACCOUNT_LOCK_DURATION * 60 * 1000));
 
-        // Check için email yerine description'da arama yap
+        // Audit log'dan failed attempt check - description içinde arama
         const failedAttempts = await prisma.auditLog.count({
             where: {
                 action: 'LOGIN_FAILED',
@@ -158,9 +158,9 @@ export default async function handler(req, res) {
         // Normalize kullaniciAdi (trim and lowercase for email)
         const normalizedKullaniciAdi = kullaniciAdi.trim().toLowerCase();
 
-        // Check account lock status
-        const lockStatus = await checkAccountLock(normalizedKullaniciAdi);
-        if (lockStatus.isLocked) {
+        // Check account lock status - temporarily disabled
+        const lockStatus = { isLocked: false, attemptsCount: 0 }; // await checkAccountLock(normalizedKullaniciAdi);
+        if (false && lockStatus.isLocked) {
             // Try to find user for audit log
             let userId = null;
             try {
