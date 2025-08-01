@@ -115,7 +115,11 @@ export default async function handler(req, res) {
     const userAgent = req.headers['user-agent'] || 'unknown';
 
     try {
-        const { kullaniciAdi, sifre } = req.body;
+        // Accept both field name formats (frontend compatibility)
+        const kullaniciAdi = req.body.kullaniciAdi || req.body.username;
+        const sifre = req.body.sifre || req.body.password;
+
+        console.log('Login attempt:', { kullaniciAdi, hasPassword: !!sifre, body: Object.keys(req.body) });
 
         // Input validation
         const validationErrors = validateLoginInput(kullaniciAdi, sifre);
