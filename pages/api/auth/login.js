@@ -28,14 +28,14 @@ async function logLoginAttempt(kullaniciAdi, ip, success, reason = null, userId 
             personelId: userId || null,
             action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
             tableName: 'User',
-            recordId: userId || null,
+            recordId: userId ? String(userId) : 'null',
             description: `${success ? 'Başarılı' : 'Başarısız'} giriş denemesi: ${kullaniciAdi}${reason ? ` - ${reason}` : ''}`,
             oldValues: null,
             newValues: null,
             req: null
         });
     } catch (error) {
-        console.error('❌ Login attempt logging failed:', error);
+        console.error('❌ Audit log hatası:', error);
     }
 }
 
@@ -47,11 +47,14 @@ async function checkAccountLock(email) {
         // Count failed login attempts in the last lock duration period
         const lockTimeAgo = new Date(Date.now() - (ACCOUNT_LOCK_DURATION * 60 * 1000));
 
+        // Check için email yerine description'da arama yap
         const failedAttempts = await prisma.auditLog.count({
             where: {
                 action: 'LOGIN_FAILED',
-                userEmail: email,
-                createdAt: {
+                description: {
+                    contains: email
+                },
+                timestamp: {
                     gte: lockTimeAgo
                 }
             }
@@ -201,7 +204,7 @@ export default async function handler(req, res) {
                 password: true,
                 rol: true,
                 aktif: true,
-                lastLogin: true
+                personelId: true
             }
         });
 
@@ -216,7 +219,7 @@ export default async function handler(req, res) {
         // Password verification
         const valid = await bcrypt.compare(sifre, user.password);
         if (!valid) {
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'INVALID_PASSWORD', user.id);
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'INVALID_PASSWORD', user.personelId);
             return res.status(401).json({
                 success: false,
                 message: 'Geçersiz kullanıcı adı veya şifre.'
@@ -234,18 +237,17 @@ export default async function handler(req, res) {
         const accessToken = generateAccessToken(tokenPayload);
         const refreshToken = generateRefreshToken({ id: user.id });
 
-        // Update last login timestamp
+        // Update user timestamp
         await prisma.user.update({
             where: { id: user.id },
             data: {
-                lastLogin: new Date(),
                 // Clear any previous login attempts on successful login
                 updatedAt: new Date()
             }
         });
 
         // Log successful login
-        await logLoginAttempt(user.email, clientIP, true, 'SUCCESS', user.id);
+        await logLoginAttempt(user.email, clientIP, true, 'SUCCESS', user.personelId);
 
         // Get stock alerts for user
         let stokUyarilari = null;
@@ -306,7 +308,7 @@ export default async function handler(req, res) {
                 ad: user.ad,
                 email: user.email,
                 rol: user.rol,
-                lastLogin: user.lastLogin
+                personelId: user.personelId
             },
             accessToken,
             refreshToken,
