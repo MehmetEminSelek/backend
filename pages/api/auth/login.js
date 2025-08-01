@@ -143,7 +143,7 @@ export default async function handler(req, res) {
             } catch (error) {
                 // Ignore user lookup errors for audit log
             }
-            
+
             await logLoginAttempt(kullaniciAdi, clientIP, false, 'VALIDATION_ERROR', userId);
             return res.status(400).json({
                 success: false,
@@ -174,7 +174,7 @@ export default async function handler(req, res) {
             } catch (error) {
                 // Ignore user lookup errors for audit log
             }
-            
+
             await logLoginAttempt(kullaniciAdi, clientIP, false, 'ACCOUNT_LOCKED', userId);
             return res.status(423).json({
                 success: false,
