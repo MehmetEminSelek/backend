@@ -94,7 +94,7 @@ enum ErpDurum {
 // 🏢 BRANCH & LOCATION MANAGEMENT
 // ===================================================================
 
-model Sube {
+model  {
   id  Int      @id @default(autoincrement())
   ad  String   @unique
   kod String   @unique // SB001, SB002, OP001, vb.
@@ -1097,6 +1097,8 @@ enum AuditAction {
 
   // Login/Security
   LOGIN
+  LOGIN_SUCCESS
+  LOGIN_FAILED
   LOGOUT
   PASSWORD_CHANGE
   PERMISSION_CHANGE
