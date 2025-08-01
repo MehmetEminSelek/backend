@@ -94,7 +94,7 @@ enum ErpDurum {
 // 🏢 BRANCH & LOCATION MANAGEMENT
 // ===================================================================
 
-model  {
+model Sube {
   id  Int      @id @default(autoincrement())
   ad  String   @unique
   kod String   @unique // SB001, SB002, OP001, vb.
