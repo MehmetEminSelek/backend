@@ -338,29 +338,15 @@ async function createCustomer(req, res) {
 }
 
 // ===== SECURITY INTEGRATION =====
-export default secureAPI(
-    withPrismaSecurity(customersHandler),
-    {
-        // RBAC Configuration
-        permission: PERMISSIONS.VIEW_CUSTOMERS, // Base permission, individual operations check higher permissions
+import { requireAuth } from '../../../lib/simple-auth.js';
+import { PrismaClient } from '@prisma/client';
 
-        // Method-specific permissions will be checked in handlers
-        // GET: VIEW_CUSTOMERS
-        // POST: CREATE_CUSTOMERS
+const prisma = new PrismaClient();
 
-        // Input Validation Configuration
-        allowedFields: [
-            'ad', 'soyad', 'unvan', 'telefon', 'email', 'adres', 'il', 'ilce',
-            'postaKodu', 'musteriKodu', 'tipi', 'vergiDairesi', 'vergiNo',
-            'subeId', 'notlar', 'aktif',
-            'page', 'limit', 'search', 'sortBy', 'sortOrder'
-        ],
-        requiredFields: {
-            POST: ['ad', 'telefon']
-        },
+async function handler(req, res) {
+    // Simple auth zaten user'ı req'e ekledi
+    req.prisma = prisma;
+    return customersHandler(req, res);
+}
 
-        // Security Options
-        preventSQLInjection: true,
-        enableAuditLogging: true
-    }
-); 
+export default requireAuth(handler); 

@@ -9,6 +9,9 @@ import { withPrismaSecurity } from '../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../lib/rbac-enhanced.js';
 import { auditLog } from '../../lib/audit-logger.js';
 import { validateInput } from '../../lib/validation.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 /**
  * Dropdown API Handler with Full Security Integration
@@ -69,7 +72,8 @@ async function getDropdownData(req, res) {
   console.log('GET /api/dropdown request received...');
 
   // Enhanced security transaction for dropdown data
-  const dropdownData = await req.prisma.secureTransaction(async (tx) => {
+  // Temporarily use direct prisma instead of req.prisma
+  const dropdownData = await prisma.$transaction(async (tx) => {
     const results = {};
 
     // Base where clause for active records
@@ -174,8 +178,8 @@ async function getDropdownData(req, res) {
     if ((!category || category === 'cariler') && req.user.roleLevel >= 50) {
       results.cariler = await tx.secureQuery('cariMusteri', 'findMany', {
         where: activeWhere,
-          select: {
-            id: true,
+        select: {
+          id: true,
           musteriKodu: true,
           musteriTipi: true,
           bolge: true,
@@ -202,8 +206,8 @@ async function getDropdownData(req, res) {
     if (!category || category === 'kategoriler') {
       results.kategoriler = await tx.secureQuery('kategori', 'findMany', {
         where: activeWhere,
-              select: {
-                id: true,
+        select: {
+          id: true,
           ad: true,
           kod: true,
           aktif: true,
@@ -271,20 +275,7 @@ async function getDropdownData(req, res) {
 }
 
 // ===== SECURITY INTEGRATION =====
-export default secureAPI(
-  withPrismaSecurity(dropdownHandler),
-  {
-    // RBAC Configuration
-    permission: PERMISSIONS.VIEW_BASIC_DATA, // Basic permission for dropdown access
+import { requireAuth } from '../../lib/simple-auth.js';
 
-    // Input Validation Configuration
-    allowedFields: ['category', 'includeInactive', 'format'],
-    requiredFields: {},
-
-    // Security Options
-    preventSQLInjection: true,
-    enableAuditLogging: true,
-    cacheResults: true // Dropdown data can be cached
-  }
-);
+export default requireAuth(dropdownHandler);
 

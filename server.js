@@ -55,7 +55,7 @@ app.prepare().then(() => {
                 console.log('CORS DEBUG - Fallback origin: *');
             }
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, cache-control');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, cache-control, x-security-level, x-request-timestamp, x-device-fingerprint');
             res.setHeader('Access-Control-Allow-Credentials', 'true');
 
             // Preflight requests - OPTIONS method için özel handling
@@ -63,7 +63,7 @@ app.prepare().then(() => {
                 res.writeHead(200, {
                     'Access-Control-Allow-Origin': origin || '*',
                     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, cache-control',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, cache-control, x-security-level, x-request-timestamp, x-device-fingerprint',
                     'Access-Control-Allow-Credentials': 'true'
                 });
                 res.end();

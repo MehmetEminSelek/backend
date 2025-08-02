@@ -26,7 +26,7 @@ async function logLoginAttempt(kullaniciAdi, ip, success, reason = null, userId 
     try {
         await auditLog({
             personelId: userId || null,
-            action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
+            action: success ? 'LOGIN' : 'LOGIN',
             tableName: 'User',
             recordId: userId ? String(userId) : 'null',
             description: `${success ? 'Başarılı' : 'Başarısız'} giriş denemesi: ${kullaniciAdi}${reason ? ` - ${reason}` : ''}`,
@@ -119,7 +119,7 @@ export default async function handler(req, res) {
 
     try {
         // Accept both field name formats (frontend compatibility)
-        const kullaniciAdi = req.body.kullaniciAdi || req.body.username;
+        const kullaniciAdi = req.body.kullaniciAdi || req.body.username || req.body.email;
         const sifre = req.body.sifre || req.body.password;
 
         console.log('Login attempt:', { kullaniciAdi, hasPassword: !!sifre, body: Object.keys(req.body) });
@@ -209,7 +209,18 @@ export default async function handler(req, res) {
         });
 
         if (!user) {
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'USER_NOT_FOUND', null);
+            // Kullanıcı bulunamasa bile deaktif kullanıcıyı bul personelId için
+            const inactiveUser = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { email: normalizedKullaniciAdi },
+                        { username: normalizedKullaniciAdi }
+                    ]
+                },
+                select: { personelId: true }
+            });
+
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'USER_NOT_FOUND', inactiveUser?.personelId || null);
             return res.status(401).json({
                 success: false,
                 message: 'Geçersiz kullanıcı adı veya şifre.'
@@ -261,8 +272,12 @@ export default async function handler(req, res) {
                         { mevcutStok: { lte: 0 } },
                         {
                             AND: [
-                                { kritikSeviye: { not: { equals: null } } },
-                                { mevcutStok: { lte: 10 } }
+                                { kritikSeviye: { not: null } },
+                                {
+                                    mevcutStok: {
+                                        lte: 10  // Kritik seviyenin altında olan stoklar
+                                    }
+                                }
                             ]
                         }
                     ]
@@ -318,7 +333,27 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('❌ Login error:', error);
 
-        await logLoginAttempt(req.body?.kullaniciAdi, clientIP, false, 'SERVER_ERROR', null);
+        // Try to find user for audit log even in error case
+        let userId = null;
+        try {
+            const kullaniciAdi = req.body?.kullaniciAdi || req.body?.username || req.body?.email;
+            if (kullaniciAdi) {
+                const user = await prisma.user.findFirst({
+                    where: {
+                        OR: [
+                            { email: kullaniciAdi.toLowerCase() },
+                            { username: kullaniciAdi.toLowerCase() }
+                        ]
+                    },
+                    select: { personelId: true }
+                });
+                userId = user?.personelId || null;
+            }
+        } catch (auditError) {
+            // Ignore audit lookup errors
+        }
+
+        await logLoginAttempt(req.body?.kullaniciAdi || req.body?.username || req.body?.email, clientIP, false, 'SERVER_ERROR', userId);
 
         return res.status(500).json({
             success: false,
