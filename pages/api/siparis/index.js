@@ -86,7 +86,7 @@ async function getOrders(req, res) {
 
     // Status filtering
     if (durum) {
-        const validStatuses = ['ONAY_BEKLEYEN', 'ONAYLANDI', 'HAZIRLANIYOR', 'HAZIR', 'KARGODA', 'TESLIM_EDILDI', 'IPTAL'];
+        const validStatuses = ['ONAY_BEKLEYEN', 'HAZIRLLANACAK', 'HAZIRLANDI', 'IPTAL'];
         if (validStatuses.includes(durum)) {
             whereClause.durum = durum.toUpperCase();
         }
@@ -434,7 +434,7 @@ async function createOrder(req, res) {
             // Map frontend birim values to backend enum values
             const birimMapping = {
                 'Gram': 'GRAM',
-                'Adet': 'ADET', 
+                'Adet': 'ADET',
                 'Kg': 'KG',
                 'Paket': 'PAKET',
                 'Kutu': 'KUTU',

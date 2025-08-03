@@ -396,13 +396,9 @@ model Cari {
   aktif Boolean @default(true)
 
   // Relations
-  hareketler CariHareket[]
-  odemeler   CariOdeme[]
-  adresler   CariAdres[] // YENİ: Çoklu adres desteği
+  // REMOVED relations - only using CariMusteri now
   
-  // CSV'den gelen müşteri verileri ile ilişki
-  cariMusteriRelation CariMusteriRelation?
-  cariMusteriler CariMusteri[]
+  // REMOVED: old relations - not needed anymore
 
   // Audit
   createdAt DateTime @default(now())
@@ -423,9 +419,7 @@ model Cari {
 model CariAdres {
   id     Int  @id @default(autoincrement())
   
-  // Ana Cari relation
-  cariId Int?
-  cari   Cari? @relation(fields: [cariId], references: [id], onDelete: Cascade)
+  // REMOVED: Ana Cari relation - only using CariMusteri now
   
   // CariMusteri relation - CSV'den gelen müşteriler için
   cariMusteriId Int?
@@ -448,7 +442,6 @@ model CariAdres {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@index([cariId])
   @@index([cariMusteriId])
   @@index([tip])
   @@index([varsayilan])
@@ -484,13 +477,13 @@ model CariMusteri {
   // Durum
   aktif       Boolean @default(true)
   
-  // İlerleyen süreçte ana Cari tablosu ile ilişki kurulabilir
-  cariId      Int?    // Ana Cari kaydı ile eşleştirme için
-  cari        Cari?   @relation(fields: [cariId], references: [id])
+  // REMOVED: Old Cari relation - using only CariMusteri now
   
   // Relations
   adresler    CariAdres[]
   siparisler  Siparis[] // Orders by this customer
+  hareketler  CariHareket[] // Financial movements
+  odemeler    CariOdeme[] // Payment records
   
   // Audit
   createdAt   DateTime @default(now())
@@ -501,12 +494,7 @@ model CariMusteri {
   @@index([aktif])
 }
 
-// Ana Cari modeline CariMusteri relation ekliyoruz
-model CariMusteriRelation {
-  id     Int    @id @default(autoincrement())
-  cariId Int    @unique
-  cari   Cari   @relation(fields: [cariId], references: [id], onDelete: Cascade)
-}
+// REMOVED: CariMusteriRelation - not needed anymore
 
 // ===================================================================
 // 📋 ORDER MANAGEMENT (Best Practice)
@@ -968,9 +956,9 @@ enum TransferDurumu {
 // ===================================================================
 
 model CariHareket {
-  id     Int  @id @default(autoincrement())
-  cariId Int
-  cari   Cari @relation(fields: [cariId], references: [id])
+  id            Int  @id @default(autoincrement())
+  cariMusteriId Int
+  cariMusteri   CariMusteri @relation(fields: [cariMusteriId], references: [id])
 
   // Transaction Details
   tip      HareketTipi
@@ -996,7 +984,7 @@ model CariHareket {
   createdBy Int?
   user      User?    @relation(fields: [createdBy], references: [id])
 
-  @@index([cariId])
+  @@index([cariMusteriId])
   @@index([tip])
   @@index([createdAt])
 }
@@ -1008,9 +996,9 @@ enum HareketTipi {
 }
 
 model CariOdeme {
-  id     Int  @id @default(autoincrement())
-  cariId Int
-  cari   Cari @relation(fields: [cariId], references: [id])
+  id            Int  @id @default(autoincrement())
+  cariMusteriId Int
+  cariMusteri   CariMusteri @relation(fields: [cariMusteriId], references: [id])
 
   // Payment Details
   tutar        Float
@@ -1042,7 +1030,7 @@ model CariOdeme {
   createdBy Int?
   user      User?    @relation(fields: [createdBy], references: [id])
 
-  @@index([cariId])
+  @@index([cariMusteriId])
   @@index([odemeYontemi])
   @@index([durum])
   @@index([odemeTarihi])

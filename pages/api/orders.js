@@ -55,7 +55,7 @@ export default async function handler(req, res) {
         include: {
           teslimatTuru: { select: { ad: true } },
           sube: { select: { ad: true } },
-          cari: { select: { id: true, ad: true, musteriKodu: true } },
+          cari: { select: { id: true, cariAdi: true, musteriKodu: true, telefon: true } },
           odemeler: {
             orderBy: { odemeTarihi: 'desc' },
             select: {

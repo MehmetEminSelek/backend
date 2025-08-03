@@ -40,9 +40,9 @@ export default async function handler(req, res) {
 
         try {
             // Müşteriyi kontrol et
-            const cari = await prisma.cari.findUnique({
+            const cari = await prisma.cariMusteri.findUnique({
                 where: { id: Number(cariId) },
-                select: { id: true, ad: true, musteriKodu: true }
+                select: { id: true, cariAdi: true, musteriKodu: true }
             });
 
             if (!cari) {
@@ -100,7 +100,7 @@ export default async function handler(req, res) {
             });
 
             // Cari bakiyesini güncelle (ödeme alındığında bakiye artar)
-            await prisma.cari.update({
+            await prisma.cariMusteri.update({
                 where: { id: Number(cariId) },
                 data: {
                     bakiye: {
