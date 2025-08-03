@@ -461,7 +461,7 @@ async function createOrder(req, res) {
                 karMarji: finalTotal - toplamMaliyet,
                 indirimTutari: parseFloat(indirimTutari) || 0,
                 indirimSebebi: indirimSebebi || null,
-                olusturanKullanici: req.user?.userId || null
+                createdBy: req.user?.userId || null
             }
         });
 
@@ -486,7 +486,7 @@ async function createOrder(req, res) {
                         referansId: newOrder.id,
                         referansTip: 'SIPARIS',
                         aciklama: `Sipariş rezervasyonu: ${siparisNo}`,
-                        olusturanKullanici: req.user.userId
+                        createdBy: req.user.userId
                     }
                 });
             }

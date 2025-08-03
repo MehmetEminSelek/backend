@@ -75,7 +75,7 @@ async function updateTransferInfo(req, res, orderId) {
             sipariNo: true,
             durum: true,
             musteriAd: true,
-            olusturanKullanici: true,
+            createdBy: true,
             hedefSubeId: true
         }
     });
@@ -87,7 +87,7 @@ async function updateTransferInfo(req, res, orderId) {
     }
 
     // Permission checks
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyTransfer = req.user.roleLevel >= 70 || isOwner; // Managers+ or owner
 
     if (!canModifyTransfer) {

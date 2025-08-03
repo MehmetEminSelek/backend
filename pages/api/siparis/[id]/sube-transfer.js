@@ -78,7 +78,7 @@ async function updateBranchTransfer(req, res, orderId) {
             sipariNo: true,
             durum: true,
             musteriAd: true,
-            olusturanKullanici: true,
+            createdBy: true,
             subeNeredenId: true,
             subeNereyeId: true
         }
@@ -91,7 +91,7 @@ async function updateBranchTransfer(req, res, orderId) {
     }
 
     // Permission checks - Only managers+ can handle branch transfers
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyBranchTransfer = req.user.roleLevel >= 70; // Managers+ only
 
     if (!canModifyBranchTransfer) {

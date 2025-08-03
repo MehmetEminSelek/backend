@@ -133,7 +133,7 @@ async function updateCargoInfo(req, res, orderId) {
             kargoDurumu: true,
             kargoSirketi: true,
             kargoTakipNo: true,
-            olusturanKullanici: true
+            createdBy: true
         }
     });
 
@@ -144,7 +144,7 @@ async function updateCargoInfo(req, res, orderId) {
     }
 
     // Permission checks
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyCargo = req.user.roleLevel >= 60 || isOwner; // Supervisors+ or owner
 
     if (!canModifyCargo) {

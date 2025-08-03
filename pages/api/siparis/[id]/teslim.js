@@ -61,7 +61,7 @@ async function markAsDelivered(req, res, orderId) {
             sipariNo: true,
             durum: true,
             musteriAd: true,
-            olusturanKullanici: true
+            createdBy: true
         }
     });
 
@@ -72,7 +72,7 @@ async function markAsDelivered(req, res, orderId) {
     }
 
     // Permission checks
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canMarkDelivered = req.user.roleLevel >= 60 || isOwner; // Supervisors+ or owner
 
     if (!canMarkDelivered) {
