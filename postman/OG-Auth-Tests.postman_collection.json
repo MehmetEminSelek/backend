@@ -1,0 +1,422 @@
+{
+    "info": {
+        "name": "OG Auth Tests",
+        "description": "Backend auth system tests",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000/api"
+        },
+        {
+            "key": "accessToken",
+            "value": ""
+        }
+    ],
+    "item": [
+        {
+            "name": "🔐 Authentication Tests",
+            "item": [
+                {
+                    "name": "1. Login - VIEWER (baris.gullu)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "// Token'ı kaydet",
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                                    "    ",
+                                    "    // Test sonuçları",
+                                    "    pm.test('Login başarılı', function () {",
+                                    "        pm.expect(jsonData.success).to.be.true;",
+                                    "    });",
+                                    "    ",
+                                    "    pm.test('User rolü VIEWER', function () {",
+                                    "        pm.expect(jsonData.user.rol).to.eql('VIEWER');",
+                                    "    });",
+                                    "    ",
+                                    "    pm.test('Role level 30 (VIEWER)', function () {",
+                                    "        pm.expect(jsonData.user.roleLevel).to.eql(30);",
+                                    "    });",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"kullaniciAdi\": \"baris.gullu\",\n  \"sifre\": \"bar123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "2. Validate Token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Token geçerli', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.success).to.be.true;",
+                                    "    pm.expect(jsonData.tokenValid).to.be.true;",
+                                    "});",
+                                    "",
+                                    "pm.test('User bilgileri mevcut', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.user).to.have.property('username');",
+                                    "    pm.expect(jsonData.user).to.have.property('rol');",
+                                    "    pm.expect(jsonData.user).to.have.property('roleLevel');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{accessToken}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"token\": \"{{accessToken}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/validate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "validate"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "3. Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{accessToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/logout",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "logout"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "📊 Role-Based Access Tests",
+            "item": [
+                {
+                    "name": "1. Dropdown - All Data (VIEWER)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Response 200 OK', function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "",
+                                    "pm.test('VIEWER - Teslimat türleri erişilebilir', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.data).to.have.property('teslimatTurleri');",
+                                    "});",
+                                    "",
+                                    "pm.test('VIEWER - Kategoriler erişilebilir', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.data).to.have.property('kategoriler');",
+                                    "});",
+                                    "",
+                                    "pm.test('VIEWER - Şubeler YASAKLI (roleLevel < 50)', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.data).to.not.have.property('subeler');",
+                                    "});",
+                                    "",
+                                    "pm.test('VIEWER - Ödeme yöntemleri YASAKLI (roleLevel < 60)', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.data).to.not.have.property('odemeYontemleri');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{accessToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/dropdown",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "dropdown"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "2. Dropdown - Specific Category (teslimat)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Sadece teslimat türleri döndü', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.data).to.have.property('teslimatTurleri');",
+                                    "    pm.expect(jsonData.data).to.not.have.property('kategoriler');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{accessToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/dropdown?category=teslimat",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "dropdown"
+                            ],
+                            "query": [
+                                {
+                                    "key": "category",
+                                    "value": "teslimat"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "3. Dropdown - Forbidden Category (cariler)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('VIEWER - Cariler erişim YOK (roleLevel < 50)', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.data).to.not.have.property('cariler');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{accessToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/dropdown?category=cariler",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "dropdown"
+                            ],
+                            "query": [
+                                {
+                                    "key": "category",
+                                    "value": "cariler"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🔍 Error Handling Tests",
+            "item": [
+                {
+                    "name": "1. Login - Yanlış Şifre",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Login başarısız - 401', function () {",
+                                    "    pm.response.to.have.status(401);",
+                                    "});",
+                                    "",
+                                    "pm.test('Hata mesajı var', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData).to.have.property('error');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"kullaniciAdi\": \"baris.gullu\",\n  \"sifre\": \"yanlış-şifre\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "2. Dropdown - Token Yok",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Token yok - 401', function () {",
+                                    "    pm.response.to.have.status(401);",
+                                    "});",
+                                    "",
+                                    "pm.test('Auth hatası', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData.code).to.eql('INVALID_TOKEN');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/dropdown",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "dropdown"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "3. Dropdown - Geçersiz Kategori",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Geçersiz kategori - 400', function () {",
+                                    "    pm.response.to.have.status(400);",
+                                    "});",
+                                    "",
+                                    "pm.test('Allowed categories listesi var', function () {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.expect(jsonData).to.have.property('allowedCategories');",
+                                    "});"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{accessToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/dropdown?category=invalid-category",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "dropdown"
+                            ],
+                            "query": [
+                                {
+                                    "key": "category",
+                                    "value": "invalid-category"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

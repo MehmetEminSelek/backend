@@ -129,7 +129,7 @@ async function getPricing(req, res) {
     }
 
     // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
     const skip = (pageNum - 1) * limitNum;
 
@@ -141,7 +141,7 @@ async function getPricing(req, res) {
 
     // Enhanced query with security context
     const [pricingList, totalCount] = await Promise.all([
-        req.prisma.secureQuery('urunFiyat', 'findMany', {
+        prisma.urunFiyat.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -180,13 +180,13 @@ async function getPricing(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('urunFiyat', 'count', {
+        prisma.urunFiyat.count({
             where: whereClause
         })
     ]);
 
     // Calculate pricing statistics (only for higher roles)
-    const pricingStats = req.user.roleLevel >= 70 ? await req.prisma.secureQuery('urunFiyat', 'aggregate', {
+    const pricingStats = req.user.roleLevel >= 70 ? await prisma.urunFiyat.aggregate({
         where: { ...whereClause, aktif: true },
         _count: { id: true },
         _avg: {
@@ -211,9 +211,9 @@ async function getPricing(req, res) {
         limit: limitNum,
         filters: { search, urunId, aktif, fiyatTipi, dateFrom, dateTo },
         sensitiveAccess: req.user.roleLevel >= 70
-        });
+    });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         pricing: pricingList,
         pagination: {
@@ -308,9 +308,9 @@ async function createPricing(req, res) {
     }
 
     // Enhanced transaction for pricing creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Verify product exists
-        const product = await tx.secureQuery('urun', 'findUnique', {
+        const product = await tx.urun.findUnique({
             where: { id: parseInt(urunId) },
             select: {
                 id: true,
@@ -329,12 +329,12 @@ async function createPricing(req, res) {
         }
 
         // Check for overlapping active prices
-        const overlappingPrices = await tx.secureQuery('urunFiyat', 'findMany', {
-                where: {
-                    urunId: parseInt(urunId),
+        const overlappingPrices = await tx.urunFiyat.findMany({
+            where: {
+                urunId: parseInt(urunId),
                 fiyatTipi: fiyatTipi.toUpperCase(),
-                    aktif: true,
-                    OR: [
+                aktif: true,
+                OR: [
                     { bitisTarihi: null }, // Never expires
                     { bitisTarihi: { gte: startDate } } // Expires after our start date
                 ]
@@ -352,8 +352,8 @@ async function createPricing(req, res) {
         }
 
         // Create pricing with audit trail
-        const newPricing = await tx.secureQuery('urunFiyat', 'create', {
-                        data: {
+        const newPricing = await tx.urunFiyat.create({
+            data: {
                 urunId: parseInt(urunId),
                 fiyatTipi: fiyatTipi.toUpperCase(),
                 kgFiyati: parseFloat(kgFiyati),
@@ -444,7 +444,7 @@ async function updatePricing(req, res) {
     const { id: pricingId, ...updateFields } = req.body;
 
     // Get current pricing for comparison
-    const currentPricing = await req.prisma.secureQuery('urunFiyat', 'findUnique', {
+    const currentPricing = await prisma.urunFiyat.findUnique({
         where: { id: parseInt(pricingId) },
         select: {
             id: true,
@@ -452,15 +452,15 @@ async function updatePricing(req, res) {
             fiyatTipi: true,
             kgFiyati: true,
             birimFiyat: true,
-                    aktif: true,
-                    urun: {
-                        select: {
-                            ad: true,
-                            kod: true
-                        }
-                    }
+            aktif: true,
+            urun: {
+                select: {
+                    ad: true,
+                    kod: true
                 }
-            });
+            }
+        }
+    });
 
     if (!currentPricing) {
         return res.status(404).json({
@@ -498,8 +498,8 @@ async function updatePricing(req, res) {
     }
 
     // Update pricing with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedPricing = await tx.secureQuery('urunFiyat', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedPricing = await tx.urunFiyat.update({
             where: { id: parseInt(pricingId) },
             data: {
                 ...updateData,
@@ -538,9 +538,9 @@ async function updatePricing(req, res) {
             birimFiyat: result.birimFiyat
         },
         sensitiveOperation: true
-        });
+    });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Pricing updated successfully',
         pricing: result,
@@ -568,7 +568,7 @@ async function deletePricing(req, res) {
     }
 
     // Get pricing details for validation
-    const pricingToDelete = await req.prisma.secureQuery('urunFiyat', 'findUnique', {
+    const pricingToDelete = await prisma.urunFiyat.findUnique({
         where: { id: parseInt(pricingId) },
         select: {
             id: true,
@@ -592,7 +592,7 @@ async function deletePricing(req, res) {
     }
 
     // Business rule checks - Check if pricing is being used in active orders
-    const usageInOrders = await req.prisma.secureQuery('siparisKalem', 'count', {
+    const usageInOrders = await prisma.siparisKalemi.count({
         where: {
             urunId: pricingToDelete.urunId,
             siparis: {
@@ -608,8 +608,8 @@ async function deletePricing(req, res) {
     }
 
     // Soft delete (deactivate) instead of hard delete for financial records
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const deactivatedPricing = await tx.secureQuery('urunFiyat', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const deactivatedPricing = await tx.urunFiyat.update({
             where: { id: parseInt(pricingId) },
             data: {
                 aktif: false,

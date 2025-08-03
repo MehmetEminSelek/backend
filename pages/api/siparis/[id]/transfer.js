@@ -68,7 +68,7 @@ async function updateTransferInfo(req, res, orderId) {
     }
 
     // Check if order exists and get current state
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
@@ -130,8 +130,8 @@ async function updateTransferInfo(req, res, orderId) {
     }
 
     // Update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
             data: {
                 ...updateData,

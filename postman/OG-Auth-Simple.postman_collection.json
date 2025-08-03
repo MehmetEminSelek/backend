@@ -1,0 +1,394 @@
+{
+    "info": {
+        "name": "OG Auth API Tests",
+        "description": "OG Sipariş yetkilendirme sistemi test koleksiyonu",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000/api",
+            "type": "string"
+        },
+        {
+            "key": "accessToken",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "1. Login VIEWER",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "if (pm.response.code === 200) {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                            "    pm.test('Login başarılı', function () {",
+                            "        pm.expect(jsonData.success).to.be.true;",
+                            "        pm.expect(jsonData.user.rol).to.eql('VIEWER');",
+                            "    });",
+                            "} else {",
+                            "    pm.test('Login hatası', function () {",
+                            "        pm.expect(pm.response.code).to.be.oneOf([401, 400]);",
+                            "    });",
+                            "}"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"kullaniciAdi\": \"baris.gullu\",\n  \"sifre\": \"bar123\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/auth/login",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "login"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "2. Validate Token",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Token geçerli', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.success).to.be.true;",
+                            "    pm.expect(jsonData.tokenValid).to.be.true;",
+                            "    pm.expect(jsonData.user.rol).to.eql('VIEWER');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"token\": \"{{accessToken}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/auth/validate",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "validate"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "3. Dropdown All (VIEWER)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Dropdown çalışıyor', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.success).to.be.true;",
+                            "});",
+                            "",
+                            "pm.test('VIEWER - Teslimat türleri VAR', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.data).to.have.property('teslimatTurleri');",
+                            "});",
+                            "",
+                            "pm.test('VIEWER - Kategoriler VAR', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.data).to.have.property('kategoriler');",
+                            "});",
+                            "",
+                            "pm.test('VIEWER - Şubeler YOK (roleLevel < 50)', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.data).to.not.have.property('subeler');",
+                            "});",
+                            "",
+                            "pm.test('VIEWER - Cariler YOK (roleLevel < 50)', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.data).to.not.have.property('cariler');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/dropdown",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "dropdown"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "4. Dropdown Teslimat Only",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Sadece teslimat kategorisi', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.data).to.have.property('teslimatTurleri');",
+                            "    pm.expect(jsonData.data).to.not.have.property('kategoriler');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/dropdown?category=teslimat",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "dropdown"
+                    ],
+                    "query": [
+                        {
+                            "key": "category",
+                            "value": "teslimat"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "5. Dropdown Forbidden (Cariler)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('VIEWER - Cariler erişim YOK', function () {",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.data).to.not.have.property('cariler');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/dropdown?category=cariler",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "dropdown"
+                    ],
+                    "query": [
+                        {
+                            "key": "category",
+                            "value": "cariler"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "6. Error - No Token",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Token yok - 401 hatası', function () {",
+                            "    pm.response.to.have.status(401);",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData.code).to.eql('INVALID_TOKEN');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/dropdown",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "dropdown"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "7. Error - Wrong Password",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Yanlış şifre - 401 hatası', function () {",
+                            "    pm.response.to.have.status(401);",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData).to.have.property('error');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"kullaniciAdi\": \"baris.gullu\",\n  \"sifre\": \"yanlis-sifre\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/auth/login",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "login"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "8. Error - Invalid Category",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Geçersiz kategori - 400 hatası', function () {",
+                            "    pm.response.to.have.status(400);",
+                            "    const jsonData = pm.response.json();",
+                            "    pm.expect(jsonData).to.have.property('allowedCategories');",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/dropdown?category=invalid-category",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "dropdown"
+                    ],
+                    "query": [
+                        {
+                            "key": "category",
+                            "value": "invalid-category"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "9. Logout",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Logout başarılı', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});"
+                        ]
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/auth/logout",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "auth",
+                        "logout"
+                    ]
+                }
+            }
+        }
+    ]
+}

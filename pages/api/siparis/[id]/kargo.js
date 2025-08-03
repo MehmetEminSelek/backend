@@ -59,7 +59,7 @@ async function cargoHandler(req, res) {
  * Get Cargo Information
  */
 async function getCargoInfo(req, res, orderId) {
-    const cargoInfo = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const cargoInfo = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
@@ -124,7 +124,7 @@ async function updateCargoInfo(req, res, orderId) {
     }
 
     // Check if order exists and get current state
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
@@ -167,7 +167,7 @@ async function updateCargoInfo(req, res, orderId) {
 
     // Tracking number validation
     if (req.body.kargoTakipNo && req.body.kargoTakipNo.length > 50) {
-                    return res.status(400).json({
+        return res.status(400).json({
             error: 'Tracking number too long (max 50 characters)'
         });
     }
@@ -230,8 +230,8 @@ async function updateCargoInfo(req, res, orderId) {
     }
 
     // Update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
             data: {
                 ...updateData,

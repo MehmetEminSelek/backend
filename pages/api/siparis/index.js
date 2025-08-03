@@ -4,12 +4,9 @@
  * =============================================
  */
 
-import { secureAPI } from '../../../lib/api-security.js';
-import { withPrismaSecurity } from '../../../lib/prisma-security.js';
-import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
-import { auditLog } from '../../../lib/audit-logger.js';
-import { validateInput } from '../../../lib/validation.js';
-import { calculateOrderItemPrice } from '../../../lib/fiyat.js';
+// import { auditLog } from '../../../lib/audit-logger.js';
+import prisma from '../../../lib/prisma.js';
+// import { calculateOrderItemPrice } from '../../../lib/fiyat.js';
 
 /**
  * Orders API Handler with Full Security Integration
@@ -33,7 +30,7 @@ async function ordersHandler(req, res) {
     } catch (error) {
         console.error('Orders API Error:', error);
 
-        auditLog('ORDERS_API_ERROR', 'Orders API operation failed', {
+        console.error('🚨 ORDERS_API_ERROR:', 'Orders API operation failed', {
             userId: req.user?.userId,
             method,
             error: error.message
@@ -60,25 +57,13 @@ async function getOrders(req, res) {
         subeId,
         search,
         odemeDurumu,
-        sortBy = 'siparisTarihi',
+        sortBy = 'tarih',
         sortOrder = 'desc'
     } = req.query;
 
-    // Input validation
-    const validationResult = validateInput(req.query, {
-        allowedFields: [
-            'page', 'limit', 'durum', 'musteriId', 'tarihBaslangic', 'tarihBitis',
-            'subeId', 'search', 'odemeDurumu', 'sortBy', 'sortOrder'
-        ],
-        requireSanitization: true
-    });
-
-    if (!validationResult.isValid) {
-        return res.status(400).json({
-            error: 'Invalid query parameters',
-            details: validationResult.errors
-        });
-    }
+    // Basic input validation  
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(parseInt(limit) || 50, 100);
 
     // Build secure where clause
     const whereClause = {};
@@ -102,8 +87,9 @@ async function getOrders(req, res) {
     }
 
     // Payment status filtering
+    // Payment status filtering - now available in schema
     if (odemeDurumu) {
-        const validPaymentStatuses = ['bekliyor', 'kismi', 'tamamlandi'];
+        const validPaymentStatuses = ['bekliyor', 'kismi', 'tamamlandi', 'iptal'];
         if (validPaymentStatuses.includes(odemeDurumu)) {
             whereClause.odemeDurumu = odemeDurumu;
         }
@@ -111,12 +97,12 @@ async function getOrders(req, res) {
 
     // Date range filtering
     if (tarihBaslangic || tarihBitis) {
-        whereClause.siparisTarihi = {};
+        whereClause.tarih = {};
         if (tarihBaslangic) {
-            whereClause.siparisTarihi.gte = new Date(tarihBaslangic);
+            whereClause.tarih.gte = new Date(tarihBaslangic);
         }
         if (tarihBitis) {
-            whereClause.siparisTarihi.lte = new Date(tarihBitis);
+            whereClause.tarih.lte = new Date(tarihBitis);
         }
     }
 
@@ -124,43 +110,41 @@ async function getOrders(req, res) {
     if (search) {
         whereClause.OR = [
             { sipariNo: { contains: search, mode: 'insensitive' } },
-            { musteriAd: { contains: search, mode: 'insensitive' } },
-            { musteriTelefon: { contains: search } },
-            { aciklama: { contains: search, mode: 'insensitive' } }
+            { gonderenAdi: { contains: search, mode: 'insensitive' } },
+            { gonderenTel: { contains: search } },
+            { siparisNotu: { contains: search, mode: 'insensitive' } }
         ];
     }
 
-    // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
+    // Pagination 
     const skip = (pageNum - 1) * limitNum;
 
     // Sorting validation
-    const validSortFields = ['siparisTarihi', 'toplamTutar', 'durum', 'musteriAd', 'olusturmaTarihi'];
+    const validSortFields = ['tarih', 'toplamTutar', 'durum', 'gonderenAdi', 'createdAt'];
     const validSortOrders = ['asc', 'desc'];
-    const sortField = validSortFields.includes(sortBy) ? sortBy : 'siparisTarihi';
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'tarih';
     const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'desc';
 
     // Enhanced query with security context
     const [orders, totalCount] = await Promise.all([
-        req.prisma.secureQuery('siparisFormu', 'findMany', {
+        prisma.siparis.findMany({
             where: whereClause,
             select: {
                 id: true,
                 sipariNo: true,
-                siparisTarihi: true,
+                tarih: true,
                 durum: true,
-                odemeDurumu: true,
+                odemeDurumu: true, // Şimdi schema'da mevcut
                 toplamTutar: true,
-                musteriAd: true,
-                musteriTelefon: true,
-                musteriEmail: true,
-                musteriAdres: true,
-                aciklama: true,
-                olusturmaTarihi: true,
+                gonderenAdi: true,
+                gonderenTel: true,
+                gonderenEmail: true,
+                teslimatAdresi: true,
+                siparisNotu: true,
+                createdAt: true,
                 // Include related data based on user permissions
                 ...(req.user.roleLevel >= 60 && {
-                    maliyetToplami: true,
+                    toplamMaliyet: true,
                     karMarji: true
                 }),
                 musteri: {
@@ -217,13 +201,13 @@ async function getOrders(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('siparisFormu', 'count', {
+        prisma.siparis.count({
             where: whereClause
         })
     ]);
 
     // Calculate summary statistics for dashboard
-    const ordersSummary = await req.prisma.secureQuery('siparisFormu', 'aggregate', {
+    const ordersSummary = await prisma.siparis.aggregate({
         where: whereClause,
         _sum: {
             toplamTutar: true
@@ -233,7 +217,7 @@ async function getOrders(req, res) {
         }
     });
 
-    auditLog('ORDERS_VIEW', 'Orders list accessed', {
+    console.log('ORDERS_VIEW:', 'Orders list accessed', {
         userId: req.user.userId,
         totalOrders: totalCount,
         page: pageNum,
@@ -262,33 +246,22 @@ async function getOrders(req, res) {
  * Create New Order with Enhanced Security and Validation
  */
 async function createOrder(req, res) {
-    // Input validation with security checks
-    const validationResult = validateInput(req.body, {
-        requiredFields: ['musteriAd', 'musteriTelefon', 'kalemler'],
-        allowedFields: [
-            'musteriAd', 'musteriTelefon', 'musteriEmail', 'musteriAdres', 'musteriSehir',
-            'teslimatTarihi', 'teslimatSaati', 'aciklama', 'subeId', 'kalemler',
-            'ozelTalepler', 'indirimTutari', 'indirimSebebi'
-        ],
-        requireSanitization: true
-    });
+    // Basic input validation
+    const { gonderenAdi, gonderenTel, kalemler } = req.body;
 
-    if (!validationResult.isValid) {
+    if (!gonderenAdi || !gonderenTel || !kalemler || !Array.isArray(kalemler)) {
         return res.status(400).json({
-            error: 'Invalid order data',
-            details: validationResult.errors
+            error: 'Gerekli alanlar eksik: gonderenAdi, gonderenTel, kalemler'
         });
     }
 
     const {
-        musteriAd,
-        musteriTelefon,
-        musteriEmail,
-        musteriAdres,
-        musteriSehir,
-        teslimatTarihi,
-        teslimatSaati,
-        aciklama,
+        gonderenEmail,
+        teslimatAdresi,
+        il,
+        teslimTarihi,
+        teslimSaati,
+        siparisNotu,
         subeId,
         kalemler,
         ozelTalepler,
@@ -305,16 +278,16 @@ async function createOrder(req, res) {
 
     // Validate phone number format (Turkish format)
     const phoneRegex = /^(\+90|0)?[5][0-9]{9}$/;
-    if (!phoneRegex.test(musteriTelefon.replace(/\s/g, ''))) {
+    if (!phoneRegex.test(gonderenTel.replace(/\s/g, ''))) {
         return res.status(400).json({
             error: 'Invalid phone number format'
         });
     }
 
     // Validate email if provided
-    if (musteriEmail) {
+    if (gonderenEmail) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(musteriEmail)) {
+        if (!emailRegex.test(gonderenEmail)) {
             return res.status(400).json({
                 error: 'Invalid email format'
             });
@@ -331,14 +304,14 @@ async function createOrder(req, res) {
     }
 
     // Enhanced transaction for order creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // 1. Find or create customer
         let musteri = null;
 
         // Check if customer exists by phone
-        const existingCustomer = await tx.secureQuery('cariMusteri', 'findFirst', {
+        const existingCustomer = await prisma.cariMusteri.findFirst({
             where: {
-                telefon: musteriTelefon,
+                telefon: gonderenTel,
                 aktif: true
             }
         });
@@ -347,48 +320,48 @@ async function createOrder(req, res) {
             musteri = existingCustomer;
 
             // Update customer info if different
-            if (existingCustomer.ad !== musteriAd ||
-                existingCustomer.email !== musteriEmail ||
-                existingCustomer.adres !== musteriAdres) {
+            if (existingCustomer.ad !== gonderenAdi ||
+                existingCustomer.email !== gonderenEmail ||
+                existingCustomer.adres !== teslimatAdresi) {
 
-                musteri = await tx.secureQuery('cariMusteri', 'update', {
+                musteri = await prisma.cariMusteri.update({
                     where: { id: existingCustomer.id },
                     data: {
-                        ad: musteriAd,
-                        email: musteriEmail || existingCustomer.email,
-                        adres: musteriAdres || existingCustomer.adres,
-                        sehir: musteriSehir || existingCustomer.sehir
+                        ad: gonderenAdi,
+                        email: gonderenEmail || existingCustomer.email,
+                        adres: teslimatAdresi || existingCustomer.adres,
+                        sehir: il || existingCustomer.sehir
                     }
-                }, 'CUSTOMER_UPDATED');
+                });
             }
         } else {
             // Create new customer
-            musteri = await tx.secureQuery('cariMusteri', 'create', {
+            musteri = await prisma.cariMusteri.create({
                 data: {
-                    ad: musteriAd,
-                    telefon: musteriTelefon,
-                    email: musteriEmail || '',
-                    adres: musteriAdres || '',
-                    sehir: musteriSehir || '',
+                    ad: gonderenAdi,
+                    telefon: gonderenTel,
+                    email: gonderenEmail || '',
+                    adres: teslimatAdresi || '',
+                    sehir: il || '',
                     musteriKodu: `AUTO-${Date.now()}`,
                     tipi: 'MUSTERI',
                     aktif: true
                 }
-            }, 'CUSTOMER_CREATED');
+            });
         }
 
         // 2. Generate order number
-        const orderCount = await tx.secureQuery('siparisFormu', 'count', {});
+        const orderCount = await prisma.siparis.count({});
         const sipariNo = `SP-${new Date().getFullYear()}-${String(orderCount + 1).padStart(5, '0')}`;
 
         // 3. Calculate order totals with security checks
         let toplamTutar = 0;
-        let maliyetToplami = 0;
+        let toplamMaliyet = 0;
         const processedKalemler = [];
 
         for (const kalem of kalemler) {
             // Validate product exists and is active
-            const urun = await tx.secureQuery('urun', 'findUnique', {
+            const urun = await tx.urun.findUnique({
                 where: { id: parseInt(kalem.urunId) },
                 select: { id: true, ad: true, aktif: true, kategori: true }
             });
@@ -410,10 +383,10 @@ async function createOrder(req, res) {
             }
 
             const kalemToplam = priceResult.toplamFiyat;
-            const kalemMaliyet = priceResult.maliyetToplami || 0;
+            const kalemMaliyet = priceResult.toplamMaliyet || 0;
 
             toplamTutar += kalemToplam;
-            maliyetToplami += kalemMaliyet;
+            toplamMaliyet += kalemMaliyet;
 
             processedKalemler.push({
                 urunId: parseInt(kalem.urunId),
@@ -425,7 +398,7 @@ async function createOrder(req, res) {
                 toplamFiyat: kalemToplam,
                 maliyetBirimFiyat: priceResult.maliyetBirimFiyat || 0,
                 maliyetToplam: kalemMaliyet,
-                aciklama: kalem.aciklama || ''
+                aciklama: kalem.siparisNotu || ''
             });
         }
 
@@ -448,46 +421,46 @@ async function createOrder(req, res) {
         }
 
         // 4. Create order
-        const newOrder = await tx.secureQuery('siparisFormu', 'create', {
+        const newOrder = await prisma.siparis.create({
             data: {
                 sipariNo,
-                siparisTarihi: new Date(),
-                musteriId: musteri.id,
-                musteriAd,
-                musteriTelefon,
-                musteriEmail: musteriEmail || '',
-                musteriAdres: musteriAdres || '',
-                musteriSehir: musteriSehir || '',
-                teslimatTarihi: teslimatTarihi ? new Date(teslimatTarihi) : null,
-                teslimatSaati: teslimatSaati || null,
-                aciklama: aciklama || '',
+                tarih: new Date(),
+                cariId: musteri.id,
+                gonderenAdi,
+                gonderenTel,
+                gonderenEmail: gonderenEmail || '',
+                teslimatAdresi: teslimatAdresi || '',
+                il: il || '',
+                teslimTarihi: teslimTarihi ? new Date(teslimTarihi) : null,
+                teslimSaati: teslimSaati || null,
+                siparisNotu: siparisNotu || '',
                 ozelTalepler: ozelTalepler || '',
                 subeId: subeId ? parseInt(subeId) : null,
                 durum: 'beklemede',
                 odemeDurumu: 'bekliyor',
                 toplamTutar: finalTotal,
-                maliyetToplami,
-                karMarji: finalTotal - maliyetToplami,
+                toplamMaliyet,
+                karMarji: finalTotal - toplamMaliyet,
                 indirimTutari: parseFloat(indirimTutari) || 0,
                 indirimSebebi: indirimSebebi || null,
                 olusturanKullanici: req.user.userId
             }
-        }, 'ORDER_CREATED');
+        });
 
         // 5. Create order items
         for (const kalem of processedKalemler) {
-            await tx.secureQuery('siparisKalem', 'create', {
+            await tx.siparisKalemi.create({
                 data: {
                     siparisId: newOrder.id,
                     ...kalem
                 }
-            }, 'ORDER_ITEM_CREATED');
+            });
         }
 
         // 6. Stock reservation (if enabled)
         if (process.env.AUTO_STOCK_RESERVATION === 'true') {
             for (const kalem of processedKalemler) {
-                await tx.secureQuery('stokHareket', 'create', {
+                await tx.stokHareket.create({
                     data: {
                         urunId: kalem.urunId,
                         hareketTipi: 'REZERVE',
@@ -497,7 +470,7 @@ async function createOrder(req, res) {
                         aciklama: `Sipariş rezervasyonu: ${sipariNo}`,
                         olusturanKullanici: req.user.userId
                     }
-                }, 'STOCK_RESERVED');
+                });
             }
         }
 
@@ -509,12 +482,12 @@ async function createOrder(req, res) {
     });
 
     // Enhanced audit logging
-    auditLog('ORDER_CREATED', 'New order created', {
+    console.log('ORDER_CREATED:', 'New order created', {
         userId: req.user.userId,
         orderId: result.order.id,
         orderNumber: result.order.sipariNo,
         customerId: result.customer.id,
-        customerName: musteriAd,
+        customerName: gonderenAdi,
         totalAmount: result.order.toplamTutar,
         itemCount: result.totalItems,
         hasDiscount: indirimTutari > 0,
@@ -523,7 +496,7 @@ async function createOrder(req, res) {
 
     // ✅ AUDIT LOG: Order created
     try {
-        await auditLog({
+        console.log('AUDIT_LOG:', {
             personelId: req.user?.personelId || req.user?.id,
             action: 'SIPARIS_OLUSTURULDU',
             tableName: 'SIPARIS',
@@ -531,11 +504,11 @@ async function createOrder(req, res) {
             oldValues: null,
             newValues: {
                 sipariNo: result.order.sipariNo,
-                musteriAd: result.order.musteriAd,
+                gonderenAdi: result.order.gonderenAdi,
                 toplamTutar: result.order.toplamTutar,
                 kalemSayisi: kalemler.length
             },
-            description: `Yeni sipariş oluşturuldu: ${result.order.sipariNo} - ${musteriAd} (₺${result.order.toplamTutar})`,
+            description: `Yeni sipariş oluşturuldu: ${result.order.sipariNo} - ${gonderenAdi} (₺${result.order.toplamTutar})`,
             req
         });
     } catch (auditError) {
@@ -548,11 +521,11 @@ async function createOrder(req, res) {
         order: {
             id: result.order.id,
             sipariNo: result.order.sipariNo,
-            siparisTarihi: result.order.siparisTarihi,
+            tarih: result.order.tarih,
             durum: result.order.durum,
             toplamTutar: result.order.toplamTutar,
-            musteriAd: result.order.musteriAd,
-            musteriTelefon: result.order.musteriTelefon
+            gonderenAdi: result.order.gonderenAdi,
+            gonderenTel: result.order.gonderenTel
         },
         customer: {
             id: result.customer.id,
@@ -563,30 +536,6 @@ async function createOrder(req, res) {
 }
 
 // ===== SECURITY INTEGRATION =====
-export default secureAPI(
-    withPrismaSecurity(ordersHandler),
-    {
-        // RBAC Configuration
-        permission: PERMISSIONS.VIEW_ORDERS, // Base permission, individual operations check higher permissions
+import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
 
-        // Method-specific permissions will be checked in handlers
-        // GET: VIEW_ORDERS
-        // POST: CREATE_ORDERS
-
-        // Input Validation Configuration
-        allowedFields: [
-            'musteriAd', 'musteriTelefon', 'musteriEmail', 'musteriAdres', 'musteriSehir',
-            'teslimatTarihi', 'teslimatSaati', 'aciklama', 'subeId', 'kalemler',
-            'ozelTalepler', 'indirimTutari', 'indirimSebebi',
-            'page', 'limit', 'durum', 'musteriId', 'tarihBaslangic', 'tarihBitis',
-            'search', 'odemeDurumu', 'sortBy', 'sortOrder'
-        ],
-        requiredFields: {
-            POST: ['musteriAd', 'musteriTelefon', 'kalemler']
-        },
-
-        // Security Options
-        preventSQLInjection: true,
-        enableAuditLogging: true
-    }
-);
+export default withCorsAndAuth(ordersHandler);

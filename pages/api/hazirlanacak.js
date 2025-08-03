@@ -81,7 +81,7 @@ async function getProductionQueue(req, res) {
     console.log('GET /api/hazirlanacak request received...');
 
     // Enhanced security transaction for production queue data
-    const queueData = await req.prisma.secureTransaction(async (tx) => {
+    const queueData = await prisma.$transaction(async (tx) => {
         // Build where clause for production queue
         const whereClause = {
             durum: status
@@ -111,7 +111,7 @@ async function getProductionQueue(req, res) {
         }
 
         // Get production queue orders
-        const siparisler = await tx.secureQuery('siparis', 'findMany', {
+        const siparisler = await tx.siparis.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -153,21 +153,21 @@ async function getProductionQueue(req, res) {
                         ozelNot: true,
 
                         // Product information
-                            urun: {
-                                select: {
+                        urun: {
+                            select: {
                                 id: true,
-                                    ad: true,
-                                    kod: true,
+                                ad: true,
+                                kod: true,
                                 kategori: true,
                                 birim: true,
 
                                 // Production info for production staff
                                 uretimSuresi: true,
                                 aktif: true
-                                        }
-                                    }
-                                }
-                            },
+                            }
+                        }
+                    }
+                },
 
                 // Branch information
                 sube: {
@@ -293,9 +293,9 @@ async function updateProductionStatus(req, res) {
     }
 
     // Update production status with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Get current order
-        const currentOrder = await tx.secureQuery('siparis', 'findUnique', {
+        const currentOrder = await tx.siparis.findUnique({
             where: { id: parseInt(siparisId) },
             select: {
                 id: true,
@@ -306,10 +306,10 @@ async function updateProductionStatus(req, res) {
                     select: {
                         ad: true,
                         soyad: true
-                        }
                     }
                 }
-            });
+            }
+        });
 
         if (!currentOrder) {
             throw new Error('Order not found');
@@ -322,7 +322,7 @@ async function updateProductionStatus(req, res) {
         }
 
         // Update order status
-        const updatedOrder = await tx.secureQuery('siparis', 'update', {
+        const updatedOrder = await tx.siparis.update({
             where: { id: parseInt(siparisId) },
             data: {
                 durum: newStatus,

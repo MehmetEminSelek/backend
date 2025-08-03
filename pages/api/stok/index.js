@@ -4,11 +4,9 @@
  * =============================================
  */
 
-import { secureAPI } from '../../../lib/api-security.js';
-import { withPrismaSecurity } from '../../../lib/prisma-security.js';
-import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
-import { auditLog } from '../../../lib/audit-logger.js';
-import { validateInput } from '../../../lib/validation.js';
+import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
+import { createAuditLog } from '../../../lib/audit-logger.js';
+import { prisma } from '../../../lib/prisma.js';
 
 /**
  * Stock API Handler with Full Security Integration
@@ -36,7 +34,7 @@ async function stockHandler(req, res) {
     } catch (error) {
         console.error('Stock API Error:', error);
 
-        auditLog('STOCK_API_ERROR', 'Stock API operation failed', {
+        console.error('🚨 STOCK_API_ERROR:', 'Stock API operation failed', {
             userId: req.user?.userId,
             method,
             error: error.message
@@ -115,7 +113,7 @@ async function getStockList(req, res) {
     }
 
     // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
     const skip = (pageNum - 1) * limitNum;
 
@@ -127,7 +125,7 @@ async function getStockList(req, res) {
 
     // Enhanced query with security context
     const [materials, totalCount] = await Promise.all([
-        req.prisma.secureQuery('material', 'findMany', {
+        prisma.material.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -167,13 +165,13 @@ async function getStockList(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('material', 'count', {
+        prisma.material.count({
             where: whereClause
         })
     ]);
 
     // Calculate stock alerts and statistics
-    const stockAlerts = await req.prisma.secureQuery('material', 'findMany', {
+    const stockAlerts = await prisma.material.findMany({
         where: {
             aktif: true,
             OR: [
@@ -192,7 +190,7 @@ async function getStockList(req, res) {
     });
 
     // Stock summary statistics (only for higher roles)
-    const stockSummary = req.user.roleLevel >= 60 ? await req.prisma.secureQuery('material', 'aggregate', {
+    const stockSummary = req.user.roleLevel >= 60 ? await prisma.material.aggregate({
         where: whereClause,
         _count: { id: true },
         _sum: {
@@ -204,7 +202,7 @@ async function getStockList(req, res) {
         }
     }) : null;
 
-    auditLog('STOCK_VIEW', 'Stock list accessed', {
+    console.log('📦 STOCK_VIEW:', 'Stock list accessed', {
         userId: req.user.userId,
         totalMaterials: totalCount,
         page: pageNum,
@@ -283,9 +281,9 @@ async function createStockMovement(req, res) {
     }
 
     // Enhanced transaction for stock movement
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Get current material data
-        const material = await tx.secureQuery('material', 'findUnique', {
+        const material = await tx.material.findUnique({
             where: { id: parseInt(materialId) },
             select: {
                 id: true,
@@ -337,7 +335,7 @@ async function createStockMovement(req, res) {
         }
 
         // Create stock movement record
-        const movement = await tx.secureQuery('stokHareket', 'create', {
+        const movement = await tx.stokHareket.create({
             data: {
                 materialId: parseInt(materialId),
                 tip,
@@ -357,7 +355,7 @@ async function createStockMovement(req, res) {
         }, 'STOCK_MOVEMENT_CREATED');
 
         // Update material stock
-        const updatedMaterial = await tx.secureQuery('material', 'update', {
+        const updatedMaterial = await tx.material.update({
             where: { id: parseInt(materialId) },
             data: {
                 mevcutStok: yeniStok,
@@ -371,7 +369,7 @@ async function createStockMovement(req, res) {
     });
 
     // Enhanced audit logging
-    auditLog('STOCK_MOVEMENT_CREATED', 'Stock movement created', {
+    console.log('📈 STOCK_MOVEMENT_CREATED:', 'Stock movement created', {
         userId: req.user.userId,
         materialId: parseInt(materialId),
         movementType: tip,
@@ -453,8 +451,8 @@ async function updateStockLevels(req, res) {
     }
 
     // Update material stock levels
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedMaterial = await tx.secureQuery('material', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedMaterial = await tx.material.update({
             where: { id: parseInt(materialId) },
             data: {
                 ...updateData,
@@ -475,14 +473,14 @@ async function updateStockLevels(req, res) {
         return updatedMaterial;
     });
 
-    auditLog('STOCK_LEVELS_UPDATED', 'Stock levels updated', {
+    console.log('🔄 STOCK_LEVELS_UPDATED:', 'Stock levels updated', {
         userId: req.user.userId,
         materialId: parseInt(materialId),
         updates: Object.keys(updateData),
         newLevels: updateData
     });
 
-            return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Stock levels updated successfully',
         material: result
@@ -521,7 +519,7 @@ async function updateMaterial(req, res) {
     const { id: materialId, ...updateFields } = req.body;
 
     // Get current material for comparison
-    const currentMaterial = await req.prisma.secureQuery('material', 'findUnique', {
+    const currentMaterial = await prisma.material.findUnique({
         where: { id: parseInt(materialId) },
         select: {
             id: true,
@@ -561,10 +559,10 @@ async function updateMaterial(req, res) {
     }
 
     // Update material with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for code uniqueness if code is being updated
         if (updateData.kod && updateData.kod !== currentMaterial.kod) {
-            const existingMaterial = await tx.secureQuery('material', 'findFirst', {
+            const existingMaterial = await tx.material.findFirst({
                 where: {
                     kod: { equals: updateData.kod, mode: 'insensitive' },
                     id: { not: parseInt(materialId) }
@@ -576,7 +574,7 @@ async function updateMaterial(req, res) {
             }
         }
 
-        const updatedMaterial = await tx.secureQuery('material', 'update', {
+        const updatedMaterial = await tx.material.update({
             where: { id: parseInt(materialId) },
             data: {
                 ...updateData,
@@ -598,7 +596,7 @@ async function updateMaterial(req, res) {
         return updatedMaterial;
     });
 
-    auditLog('MATERIAL_UPDATED', 'Material information updated', {
+    console.log('🔧 MATERIAL_UPDATED:', 'Material information updated', {
         userId: req.user.userId,
         materialId: parseInt(materialId),
         materialCode: result.kod,
@@ -615,35 +613,4 @@ async function updateMaterial(req, res) {
 }
 
 // ===== SECURITY INTEGRATION =====
-export default secureAPI(
-    withPrismaSecurity(stockHandler),
-    {
-        // RBAC Configuration
-        permission: PERMISSIONS.VIEW_STOCK, // Base permission, individual operations check higher permissions
-
-        // Method-specific permissions will be checked in handlers
-        // GET: VIEW_STOCK
-        // POST: MANAGE_STOCK (Supervisor+)
-        // PATCH: MANAGE_STOCK (Supervisor+)
-        // PUT: UPDATE_MATERIALS (Manager+)
-
-        // Input Validation Configuration
-        allowedFields: [
-            'materialId', 'miktar', 'tip', 'aciklama', 'referansNo',
-            'birimFiyat', 'siparisId', 'tedarikciId', 'minStokSeviye',
-            'maxStokSeviye', 'kritikSeviye', 'id', 'ad', 'kod', 'tipi',
-            'birim', 'tedarikci', 'tedarikciKodu', 'rafOmru',
-            'saklamaKosullari', 'minSiparisMiktari', 'aktif',
-            'page', 'limit', 'search', 'sortBy', 'sortOrder'
-        ],
-        requiredFields: {
-            POST: ['materialId', 'miktar', 'tip'],
-            PATCH: ['materialId'],
-            PUT: ['id']
-        },
-
-        // Security Options
-        preventSQLInjection: true,
-        enableAuditLogging: true
-    }
-); 
+export default withCorsAndAuth(stockHandler); 

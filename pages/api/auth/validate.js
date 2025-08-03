@@ -6,7 +6,7 @@ import { withCorsOnly } from '../../../lib/cors-wrapper.js';
  * Token Validation Endpoint
  */
 async function handler(req, res) {
-    if (req.method !== 'POST') {
+    if (req.method !== 'GET' && req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
@@ -64,6 +64,7 @@ async function handler(req, res) {
         // Calculate role level
         const roleLevels = {
             'GENEL_MUDUR': 100,
+            'ADMIN': 95,  // Yeni ADMIN rolü
             'SUBE_MUDURU': 90,
             'URETIM_MUDURU': 80,
             'SEVKIYAT_MUDURU': 80,
@@ -72,7 +73,8 @@ async function handler(req, res) {
             'URETIM_PERSONEL': 50,
             'SEVKIYAT_PERSONELI': 50,
             'SOFOR': 40,
-            'PERSONEL': 30
+            'PERSONEL': 30,
+            'VIEWER': 25  // VIEWER rolü eklendi
         };
 
         return res.status(200).json({
@@ -83,9 +85,9 @@ async function handler(req, res) {
                 email: user.email,
                 username: user.username,
                 rol: user.rol,
-                personelId: user.personelId,
-                roleLevel: roleLevels[user.rol] || 30
+                personelId: user.personelId
             },
+            roleLevel: roleLevels[user.rol] || 30,
             tokenValid: true
         });
 

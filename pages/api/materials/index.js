@@ -115,7 +115,7 @@ async function getMaterials(req, res) {
     }
 
     // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
     const skip = (pageNum - 1) * limitNum;
 
@@ -127,7 +127,7 @@ async function getMaterials(req, res) {
 
     // Enhanced query with security context
     const [materials, totalCount] = await Promise.all([
-        req.prisma.secureQuery('material', 'findMany', {
+        prisma.material.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -169,13 +169,13 @@ async function getMaterials(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('material', 'count', {
+        prisma.material.count({
             where: whereClause
         })
     ]);
 
     // Calculate materials summary statistics (only for higher roles)
-    const materialsSummary = req.user.roleLevel >= 60 ? await req.prisma.secureQuery('material', 'aggregate', {
+    const materialsSummary = req.user.roleLevel >= 60 ? await prisma.material.aggregate({
         where: whereClause,
         _count: { id: true },
         _sum: {
@@ -188,7 +188,7 @@ async function getMaterials(req, res) {
     }) : null;
 
     // Get materials by type
-    const typeBreakdown = await req.prisma.secureQuery('material', 'groupBy', {
+    const typeBreakdown = await prisma.material.groupBy({
         by: ['tipi'],
         where: whereClause,
         _count: { id: true }
@@ -303,9 +303,9 @@ async function createMaterial(req, res) {
     }
 
     // Enhanced transaction for material creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for existing material by code
-        const existingMaterial = await tx.secureQuery('material', 'findFirst', {
+        const existingMaterial = await tx.material.findFirst({
             where: {
                 kod: { equals: kod.toUpperCase(), mode: 'insensitive' }
             }
@@ -316,7 +316,7 @@ async function createMaterial(req, res) {
         }
 
         // Create material with audit trail
-        const newMaterial = await tx.secureQuery('material', 'create', {
+        const newMaterial = await tx.material.create({
             data: {
                 ad,
                 kod: kod.toUpperCase(),
@@ -403,7 +403,7 @@ async function updateMaterial(req, res) {
     const { id: materialId, ...updateFields } = req.body;
 
     // Get current material for comparison
-    const currentMaterial = await req.prisma.secureQuery('material', 'findUnique', {
+    const currentMaterial = await prisma.material.findUnique({
         where: { id: parseInt(materialId) },
         select: {
             id: true,
@@ -446,16 +446,16 @@ async function updateMaterial(req, res) {
     }
 
     if (Object.keys(updateData).length === 0) {
-            return res.status(400).json({
+        return res.status(400).json({
             error: 'No valid updates provided'
         });
     }
 
     // Update material with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for code uniqueness if code is being updated
         if (updateData.kod && updateData.kod !== currentMaterial.kod) {
-            const existingMaterial = await tx.secureQuery('material', 'findFirst', {
+            const existingMaterial = await tx.material.findFirst({
                 where: {
                     kod: { equals: updateData.kod, mode: 'insensitive' },
                     id: { not: parseInt(materialId) }
@@ -467,7 +467,7 @@ async function updateMaterial(req, res) {
             }
         }
 
-        const updatedMaterial = await tx.secureQuery('material', 'update', {
+        const updatedMaterial = await tx.material.update({
             where: { id: parseInt(materialId) },
             data: {
                 ...updateData,
@@ -527,7 +527,7 @@ async function deleteMaterial(req, res) {
     }
 
     // Get material details for validation
-    const materialToDelete = await req.prisma.secureQuery('material', 'findUnique', {
+    const materialToDelete = await prisma.material.findUnique({
         where: { id: parseInt(materialId) },
         select: {
             id: true,
@@ -553,10 +553,10 @@ async function deleteMaterial(req, res) {
 
     // Check if material is used in any recipes or orders
     const usageCheck = await Promise.all([
-        req.prisma.secureQuery('receteKalem', 'count', {
+        prisma.receteKalemi.count({
             where: { materialId: parseInt(materialId) }
         }),
-        req.prisma.secureQuery('stokHareket', 'count', {
+        prisma.stokHareket.count({
             where: { materialId: parseInt(materialId) }
         })
     ]);
@@ -570,8 +570,8 @@ async function deleteMaterial(req, res) {
     }
 
     // Soft delete (deactivate) instead of hard delete
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const deactivatedMaterial = await tx.secureQuery('material', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const deactivatedMaterial = await tx.material.update({
             where: { id: parseInt(materialId) },
             data: {
                 aktif: false,

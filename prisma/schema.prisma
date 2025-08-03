@@ -527,7 +527,8 @@ model Siparis {
 
   // Date Info
   tarih        DateTime  
-  teslimTarihi DateTime? 
+  teslimTarihi DateTime?
+  teslimSaati  String?    // "14:30" format - API feature requirement 
 
   // Customer Info  
   cariId Int?
@@ -569,6 +570,9 @@ model Siparis {
   // Status
   durum       SiparisDurumu @default(ONAY_BEKLEYEN)
   kargoDurumu KargoDurumu   @default(ADRESE_TESLIMAT)
+  
+  // Payment Status - API feature requirement
+  odemeDurumu String? @default("bekliyor") // bekliyor, kismi, tamamlandi, iptal
 
   // Cargo Info
   kargoSirketi String?

@@ -62,7 +62,7 @@ async function orderDetailHandler(req, res) {
  */
 async function getOrderDetail(req, res, orderId) {
     // Enhanced query with security-based field selection
-    const orderDetail = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const orderDetail = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
@@ -264,7 +264,7 @@ async function updateOrder(req, res, orderId) {
     }
 
     // Get current order for comparison
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
@@ -339,7 +339,7 @@ async function updateOrder(req, res, orderId) {
     }
 
     // Enhanced transaction for order update
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         const updateData = {};
         const changeLog = [];
 
@@ -390,7 +390,7 @@ async function updateOrder(req, res, orderId) {
             }
 
             // Delete existing items
-            await tx.secureQuery('siparisKalem', 'deleteMany', {
+            await tx.siparisKalemi.deleteMany({
                 where: { siparisId: orderId }
             }, 'ORDER_ITEMS_DELETED');
 
@@ -401,7 +401,7 @@ async function updateOrder(req, res, orderId) {
             // Create new items
             for (const kalem of req.body.kalemler) {
                 // Validate product
-                const urun = await tx.secureQuery('urun', 'findUnique', {
+                const urun = await tx.urun.findUnique({
                     where: { id: parseInt(kalem.urunId) },
                     select: { id: true, ad: true, aktif: true }
                 });
@@ -428,7 +428,7 @@ async function updateOrder(req, res, orderId) {
                 newTotal += itemTotal;
                 newCostTotal += itemCost;
 
-                await tx.secureQuery('siparisKalem', 'create', {
+                await tx.siparisKalemi.create({
                     data: {
                         siparisId: orderId,
                         urunId: parseInt(kalem.urunId),
@@ -461,7 +461,7 @@ async function updateOrder(req, res, orderId) {
         updateData.guncelleyenKullanici = req.user.userId;
 
         // Update order
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
             data: updateData,
             select: {
@@ -503,7 +503,7 @@ async function updateOrder(req, res, orderId) {
  */
 async function deleteOrder(req, res, orderId) {
     // Get order details for validation
-    const orderToDelete = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const orderToDelete = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
@@ -551,9 +551,9 @@ async function deleteOrder(req, res, orderId) {
     }
 
     // Soft delete with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Mark order as cancelled instead of hard delete
-        const cancelledOrder = await tx.secureQuery('siparisFormu', 'update', {
+        const cancelledOrder = await tx.siparis.update({
             where: { id: orderId },
             data: {
                 durum: 'iptal',
@@ -564,7 +564,7 @@ async function deleteOrder(req, res, orderId) {
         }, 'ORDER_CANCELLED');
 
         // Release any stock reservations
-        await tx.secureQuery('stokHareket', 'updateMany', {
+        await tx.stokHareket.updateMany({
             where: {
                 referansId: orderId,
                 referansTip: 'SIPARIS',

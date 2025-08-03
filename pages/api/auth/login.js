@@ -22,17 +22,17 @@ function getClientIP(req) {
 /**
  * Log login attempt for security monitoring
  */
-async function logLoginAttempt(kullaniciAdi, ip, success, reason = null, userId = null) {
+async function logLoginAttempt(kullaniciAdi, ip, success, reason = null, userId = null, req = null) {
     try {
         await auditLog({
-            personelId: userId || null,
-            action: success ? 'LOGIN' : 'LOGIN',
-            tableName: 'User',
+            personelId: userId || 'SYSTEM',
+            action: success ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
+            tableName: 'USER',
             recordId: userId ? String(userId) : 'null',
             description: `${success ? 'Başarılı' : 'Başarısız'} giriş denemesi: ${kullaniciAdi}${reason ? ` - ${reason}` : ''}`,
             oldValues: null,
-            newValues: null,
-            req: null
+            newValues: { ip, userAgent: req?.headers?.['user-agent'], kullaniciAdi },
+            req
         });
     } catch (error) {
         console.error('❌ Audit log hatası:', error);
@@ -142,7 +142,7 @@ async function handler(req, res) {
                 // Ignore user lookup errors for audit log
             }
 
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'VALIDATION_ERROR', userId);
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'VALIDATION_ERROR', userId, req);
             return res.status(400).json({
                 success: false,
                 message: 'Geçersiz giriş bilgileri.',
@@ -163,7 +163,8 @@ async function handler(req, res) {
                     where: {
                         OR: [
                             { email: normalizedKullaniciAdi },
-                            { username: normalizedKullaniciAdi }
+                            { username: normalizedKullaniciAdi },
+                            { personelId: normalizedKullaniciAdi }
                         ]
                     },
                     select: { personelId: true }
@@ -173,7 +174,7 @@ async function handler(req, res) {
                 // Ignore user lookup errors for audit log
             }
 
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'ACCOUNT_LOCKED', userId);
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'ACCOUNT_LOCKED', userId, req);
             return res.status(423).json({
                 success: false,
                 message: `Hesap geçici olarak kilitlendi. ${lockStatus.attemptsCount} başarısız deneme nedeniyle ${ACCOUNT_LOCK_DURATION} dakika bekleyiniz.`,
@@ -182,12 +183,13 @@ async function handler(req, res) {
             });
         }
 
-        // Find user by email or username
+        // Find user by email, username, or personelId
         const user = await prisma.user.findFirst({
             where: {
                 OR: [
                     { email: normalizedKullaniciAdi },
-                    { username: normalizedKullaniciAdi }
+                    { username: normalizedKullaniciAdi },
+                    { personelId: normalizedKullaniciAdi }
                 ],
                 aktif: true // Only active users can login
             },
@@ -209,13 +211,14 @@ async function handler(req, res) {
                 where: {
                     OR: [
                         { email: normalizedKullaniciAdi },
-                        { username: normalizedKullaniciAdi }
+                        { username: normalizedKullaniciAdi },
+                        { personelId: normalizedKullaniciAdi }
                     ]
                 },
                 select: { personelId: true }
             });
 
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'USER_NOT_FOUND', inactiveUser?.personelId || null);
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'USER_NOT_FOUND', inactiveUser?.personelId || null, req);
             return res.status(401).json({
                 success: false,
                 message: 'Geçersiz kullanıcı adı veya şifre.'
@@ -225,7 +228,7 @@ async function handler(req, res) {
         // Password verification
         const valid = await bcrypt.compare(sifre, user.password);
         if (!valid) {
-            await logLoginAttempt(kullaniciAdi, clientIP, false, 'INVALID_PASSWORD', user.personelId);
+            await logLoginAttempt(kullaniciAdi, clientIP, false, 'INVALID_PASSWORD', user.personelId, req);
             return res.status(401).json({
                 success: false,
                 message: 'Geçersiz kullanıcı adı veya şifre.'
@@ -253,7 +256,7 @@ async function handler(req, res) {
         });
 
         // Log successful login
-        await logLoginAttempt(user.email, clientIP, true, 'SUCCESS', user.personelId);
+        await logLoginAttempt(user.email, clientIP, true, 'SUCCESS', user.personelId, req);
 
         // Get stock alerts for user
         let stokUyarilari = null;
@@ -267,7 +270,7 @@ async function handler(req, res) {
                         { mevcutStok: { lte: 0 } },
                         {
                             AND: [
-                                { kritikSeviye: { not: { equals: null } } },
+                                { kritikSeviye: { not: null } },
                                 {
                                     mevcutStok: {
                                         lte: 10  // Kritik seviyenin altında olan stoklar
@@ -320,6 +323,7 @@ async function handler(req, res) {
         // Calculate role level based on role
         const roleLevels = {
             'GENEL_MUDUR': 100,
+            'ADMIN': 95,  // Yeni ADMIN rolü
             'SUBE_MUDURU': 90,
             'URETIM_MUDURU': 80,
             'SEVKIYAT_MUDURU': 80,
@@ -328,7 +332,8 @@ async function handler(req, res) {
             'URETIM_PERSONEL': 50,
             'SEVKIYAT_PERSONELI': 50,
             'SOFOR': 40,
-            'PERSONEL': 30
+            'PERSONEL': 30,
+            'VIEWER': 25  // VIEWER rolü eklendi
         };
 
         // ✅ AUDIT LOG: Successful login
@@ -389,7 +394,7 @@ async function handler(req, res) {
             // Ignore audit lookup errors
         }
 
-        await logLoginAttempt(req.body?.kullaniciAdi || req.body?.username || req.body?.email, clientIP, false, 'SERVER_ERROR', userId);
+        await logLoginAttempt(req.body?.kullaniciAdi || req.body?.username || req.body?.email, clientIP, false, 'SERVER_ERROR', userId, req);
 
         return res.status(500).json({
             success: false,

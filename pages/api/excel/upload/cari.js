@@ -241,7 +241,7 @@ async function uploadCustomersFromExcel(req, res) {
         }
 
         // Process rows with enhanced validation
-        const processResults = await req.prisma.secureTransaction(async (tx) => {
+        const processResults = await prisma.$transaction(async (tx) => {
             const results = {
                 successful: [],
                 failed: [],
@@ -318,7 +318,7 @@ async function uploadCustomersFromExcel(req, res) {
                     usedCodes.add(customerData.musteriKodu);
 
                     // Check for existing customer (by phone, email, or code)
-                    const existingCustomer = await tx.secureQuery('cariMusteri', 'findFirst', {
+                    const existingCustomer = await tx.cariMusteri.findFirst({
                         where: {
                             OR: [
                                 { telefon: customerData.telefon },
@@ -350,7 +350,7 @@ async function uploadCustomersFromExcel(req, res) {
                     // Find or create branch
                     let subeId = null;
                     if (customerData.subeAdi) {
-                        let sube = await tx.secureQuery('sube', 'findFirst', {
+                        let sube = await tx.sube.findFirst({
                             where: {
                                 OR: [
                                     { ad: { contains: customerData.subeAdi, mode: 'insensitive' } },
@@ -362,7 +362,7 @@ async function uploadCustomersFromExcel(req, res) {
 
                         if (!sube) {
                             // Create new branch if it doesn't exist
-                            sube = await tx.secureQuery('sube', 'create', {
+                            sube = await tx.sube.create({
                                 data: {
                                     ad: customerData.subeAdi,
                                     kod: customerData.subeAdi.substring(0, 10).toUpperCase(),
@@ -383,7 +383,7 @@ async function uploadCustomersFromExcel(req, res) {
                     const soyad = nameParts.slice(1).join(' ') || '';
 
                     // Create customer
-                    const newCustomer = await tx.secureQuery('cariMusteri', 'create', {
+                    const newCustomer = await tx.cariMusteri.create({
                         data: {
                             ad,
                             soyad,
@@ -410,7 +410,7 @@ async function uploadCustomersFromExcel(req, res) {
 
                     // Create default address if provided
                     if (customerData.adres) {
-                        await tx.secureQuery('cariAdres', 'create', {
+                        await tx.cariAdres.create({
                             data: {
                                 cariMusteriId: newCustomer.id,
                                 tip: 'EV',

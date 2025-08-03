@@ -100,7 +100,7 @@ async function getAuditLogs(req, res) {
     console.log('GET /api/audit-logs request received...');
 
     // Enhanced security transaction for audit log retrieval
-    const auditData = await req.prisma.secureTransaction(async (tx) => {
+    const auditData = await prisma.$transaction(async (tx) => {
         // Build comprehensive where clause
         const whereClause = {};
 
@@ -173,7 +173,7 @@ async function getAuditLogs(req, res) {
         }
 
         // Pagination and sorting
-        const pageNum = Math.max(1, parseInt(page));
+        const pageNum = Math.max(1, parseInt(page) || 1);
         const limitNum = Math.min(Math.max(1, parseInt(limit)), 200); // Max 200 per page
         const skip = (pageNum - 1) * limitNum;
 
@@ -184,7 +184,7 @@ async function getAuditLogs(req, res) {
 
         // Get audit logs with security filtering
         const [auditLogs, totalCount] = await Promise.all([
-            tx.secureQuery('auditLog', 'findMany', {
+            tx.auditLog.findMany({
                 where: whereClause,
                 select: {
                     id: true,
@@ -223,13 +223,13 @@ async function getAuditLogs(req, res) {
                 skip,
                 take: limitNum
             }),
-            tx.secureQuery('auditLog', 'count', {
+            tx.auditLog.count({
                 where: whereClause
             })
         ]);
 
         // Calculate audit statistics
-        const auditStats = await tx.secureQuery('auditLog', 'groupBy', {
+        const auditStats = await tx.auditLog.groupBy({
             by: ['action'],
             where: {
                 ...whereClause,
@@ -250,7 +250,7 @@ async function getAuditLogs(req, res) {
         });
 
         // Security events summary
-        const securityEvents = await tx.secureQuery('auditLog', 'count', {
+        const securityEvents = await tx.auditLog.count({
             where: {
                 ...whereClause,
                 OR: [
@@ -422,9 +422,9 @@ async function purgeOldAuditLogs(req, res) {
     purgeDate.setDate(purgeDate.getDate() - parseInt(retentionDays));
 
     // Enhanced security transaction for purge operation
-    const purgeResult = await req.prisma.secureTransaction(async (tx) => {
+    const purgeResult = await prisma.$transaction(async (tx) => {
         // Count records to be purged
-        const recordsToDelete = await tx.secureQuery('auditLog', 'count', {
+        const recordsToDelete = await tx.auditLog.count({
             where: {
                 timestamp: {
                     lt: purgeDate
@@ -436,7 +436,7 @@ async function purgeOldAuditLogs(req, res) {
 
         // Perform actual deletion if not dry run and confirmed
         if (!dryRun && confirmPurge) {
-            const deleteResult = await tx.secureQuery('auditLog', 'deleteMany', {
+            const deleteResult = await tx.auditLog.deleteMany({
                 where: {
                     timestamp: {
                         lt: purgeDate

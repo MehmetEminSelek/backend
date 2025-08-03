@@ -7,14 +7,14 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 // Seed dosyalarını import et
-const { seedPersonelBilgileri } = require('./seed-personel-bilgileri');
-const { seedOdemeYontemleri } = require('./seed-odeme-yontemleri');
-const { seedSubeOperasyonBirimleri } = require('./seed-sube-operasyon');
-const { seedHammadeYariMamuller } = require('./seed-hammadde-yari-mamuller');
-const { seedGuncelUrunFiyatlari } = require('./seed-urun-ve-fiyatlar');
-const { seedReceteler } = require('./seed-receteler');
-const { seedSiparisDropdownListeleri } = require('./seed-teslimat-turu');
-const { seedCariMusteriler } = require('./seed-cari-musteriler');
+const { seedPersonelBilgileri } = require('./seed-personel-bilgileri.cjs');
+const { seedOdemeYontemleri } = require('./seed-odeme-yontemleri.cjs');
+const { seedSubeOperasyonBirimleri } = require('./seed-sube-operasyon.cjs');
+const { seedHammadeYariMamuller } = require('./seed-hammadde-yari-mamuller.cjs');
+const { seedGuncelUrunFiyatlari } = require('./seed-urun-ve-fiyatlar.cjs');
+const { seedReceteler } = require('./seed-receteler.cjs');
+const { seedSiparisDropdownListeleri } = require('./seed-teslimat-turu.cjs');
+const { seedCariMusteriler } = require('./seed-cari-musteriler.cjs');
 // const { seedStokBaslangic } = require('./seed-stok-baslangic');
 
 async function main() {

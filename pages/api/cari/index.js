@@ -115,7 +115,7 @@ async function getCustomers(req, res) {
     }
 
     // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
     const skip = (pageNum - 1) * limitNum;
 
@@ -127,7 +127,7 @@ async function getCustomers(req, res) {
 
     // Enhanced query with security context
     const [customers, totalCount] = await Promise.all([
-        req.prisma.secureQuery('cariMusteri', 'findMany', {
+        prisma.cariMusteri.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -165,13 +165,13 @@ async function getCustomers(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('cariMusteri', 'count', {
+        prisma.cariMusteri.count({
             where: whereClause
         })
     ]);
 
     // Calculate summary statistics
-    const customersSummary = await req.prisma.secureQuery('cariMusteri', 'groupBy', {
+    const customersSummary = await prisma.cariMusteri.groupBy({
         by: ['tipi'],
         where: whereClause,
         _count: {
@@ -258,9 +258,9 @@ async function createCustomer(req, res) {
     }
 
     // Enhanced transaction for customer creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for existing customers by phone or email
-        const existingCustomer = await tx.secureQuery('cariMusteri', 'findFirst', {
+        const existingCustomer = await tx.cariMusteri.findFirst({
             where: {
                 OR: [
                     { telefon },
@@ -282,7 +282,7 @@ async function createCustomer(req, res) {
         const finalCustomerCode = musteriKodu || `MUS-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
 
         // Create customer with audit trail
-        const newCustomer = await tx.secureQuery('cariMusteri', 'create', {
+        const newCustomer = await tx.cariMusteri.create({
             data: {
                 ad,
                 soyad: soyad || '',

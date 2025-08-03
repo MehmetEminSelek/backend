@@ -199,7 +199,7 @@ async function uploadUsersFromExcel(req, res) {
         }
 
         // Process rows with enhanced validation
-        const processResults = await req.prisma.secureTransaction(async (tx) => {
+        const processResults = await prisma.$transaction(async (tx) => {
             const results = {
                 successful: [],
                 failed: [],
@@ -255,7 +255,7 @@ async function uploadUsersFromExcel(req, res) {
                     }
 
                     // Check for existing user (by email or phone)
-                    const existingUser = await tx.secureQuery('kullanici', 'findFirst', {
+                    const existingUser = await tx.user.findFirst({
                         where: {
                             OR: [
                                 ...(userData.email ? [{ email: userData.email }] : []),
@@ -279,8 +279,8 @@ async function uploadUsersFromExcel(req, res) {
                             reason: 'User already exists'
                         });
                         results.statistics.duplicates++;
-                continue;
-            }
+                        continue;
+                    }
 
                     // Generate secure password (will be changed on first login)
                     const defaultPassword = `User${Date.now()}${Math.random().toString(36).substring(2, 8)}`;
@@ -289,7 +289,7 @@ async function uploadUsersFromExcel(req, res) {
                     // Find or create branch
                     let subeId = null;
                     if (userData.sube) {
-                        let sube = await tx.secureQuery('sube', 'findFirst', {
+                        let sube = await tx.sube.findFirst({
                             where: {
                                 OR: [
                                     { ad: { contains: userData.sube, mode: 'insensitive' } },
@@ -301,7 +301,7 @@ async function uploadUsersFromExcel(req, res) {
 
                         if (!sube) {
                             // Create new branch if it doesn't exist
-                            sube = await tx.secureQuery('sube', 'create', {
+                            sube = await tx.sube.create({
                                 data: {
                                     ad: userData.sube,
                                     kod: userData.sube.substring(0, 10).toUpperCase(),
@@ -317,8 +317,8 @@ async function uploadUsersFromExcel(req, res) {
                     }
 
                     // Create user
-                    const newUser = await tx.secureQuery('kullanici', 'create', {
-            data: {
+                    const newUser = await tx.user.create({
+                        data: {
                             adiSoyadi: userData.adiSoyadi,
                             email: userData.email || null,
                             telefon: userData.telefon || null,

@@ -81,7 +81,7 @@ async function getUsers(req, res) {
     const take = Math.min(parseInt(limit), 100); // Max 100 per page
 
     const [users, totalCount] = await Promise.all([
-        req.prisma.secureQuery('user', 'findMany', {
+        prisma.user.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -113,7 +113,7 @@ async function getUsers(req, res) {
             skip,
             take
         }),
-        req.prisma.secureQuery('user', 'count', {
+        prisma.user.count({
             where: whereClause
         })
     ]);
@@ -201,9 +201,9 @@ async function createUser(req, res) {
     }
 
     // Secure transaction for user creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for existing users
-        const existingUser = await tx.secureQuery('user', 'findFirst', {
+        const existingUser = await tx.user.findFirst({
             where: {
                 OR: [
                     { email },
@@ -226,7 +226,7 @@ async function createUser(req, res) {
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
         // Create user with audit trail
-        const newUser = await tx.secureQuery('user', 'create', {
+        const newUser = await tx.user.create({
             data: {
                 personelId,
                 ad,
@@ -309,7 +309,7 @@ async function updateUser(req, res) {
     }
 
     // Permission checks for user modification
-    const targetUser = await req.prisma.secureQuery('user', 'findUnique', {
+    const targetUser = await prisma.user.findUnique({
         where: { id: parseInt(userId) },
         select: { id: true, rol: true, email: true }
     });
@@ -361,7 +361,7 @@ async function updateUser(req, res) {
     }
 
     // Update user with security context
-    const updatedUser = await req.prisma.secureQuery('user', 'update', {
+    const updatedUser = await prisma.user.update({
         where: { id: parseInt(userId) },
         data: {
             ...updateData,
@@ -414,7 +414,7 @@ async function deleteUser(req, res) {
     }
 
     // Get user details for audit
-    const targetUser = await req.prisma.secureQuery('user', 'findUnique', {
+    const targetUser = await prisma.user.findUnique({
         where: { id: parseInt(userId) },
         select: { id: true, rol: true, email: true, ad: true, soyad: true }
     });
@@ -439,7 +439,7 @@ async function deleteUser(req, res) {
     }
 
     // Soft delete (set inactive) instead of hard delete for audit trail
-    const deletedUser = await req.prisma.secureQuery('user', 'update', {
+    const deletedUser = await prisma.user.update({
         where: { id: parseInt(userId) },
         data: {
             aktif: false,

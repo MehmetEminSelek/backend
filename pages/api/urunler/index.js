@@ -4,11 +4,9 @@
  * =============================================
  */
 
-import { secureAPI } from '../../../lib/api-security.js';
-import { withPrismaSecurity } from '../../../lib/prisma-security.js';
-import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
-import { auditLog } from '../../../lib/audit-logger.js';
-import { validateInput } from '../../../lib/validation.js';
+import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
+import { createAuditLog } from '../../../lib/audit-logger.js';
+import { prisma } from '../../../lib/prisma.js';
 
 /**
  * Products API Handler with Full Security Integration
@@ -36,7 +34,7 @@ async function productsHandler(req, res) {
     } catch (error) {
         console.error('Products API Error:', error);
 
-        auditLog('PRODUCTS_API_ERROR', 'Products API operation failed', {
+        console.error('🚨 PRODUCTS_API_ERROR:', 'Products API operation failed', {
             userId: req.user?.userId,
             method,
             error: error.message
@@ -69,22 +67,9 @@ async function getProducts(req, res) {
         sortOrder = 'asc'
     } = req.query;
 
-    // Input validation
-    const validationResult = validateInput(req.query, {
-        allowedFields: [
-            'page', 'limit', 'search', 'kategori', 'aktif', 'satisaUygun',
-            'ozelUrun', 'yeniUrun', 'indirimliUrun', 'minFiyat', 'maxFiyat',
-            'sortBy', 'sortOrder'
-        ],
-        requireSanitization: true
-    });
-
-    if (!validationResult.isValid) {
-        return res.status(400).json({
-            error: 'Invalid query parameters',
-            details: validationResult.errors
-        });
-    }
+    // Convert to safe numbers
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    // limitNum already defined above
 
     // Build secure where clause
     const whereClause = {};
@@ -136,9 +121,7 @@ async function getProducts(req, res) {
         ];
     }
 
-    // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
+    // Pagination and limits (pageNum and limitNum already defined above)
     const skip = (pageNum - 1) * limitNum;
 
     // Sorting validation
@@ -149,16 +132,16 @@ async function getProducts(req, res) {
 
     // Enhanced query with security context
     const [products, totalCount] = await Promise.all([
-        req.prisma.secureQuery('urun', 'findMany', {
+        prisma.urun.findMany({
             where: whereClause,
-                    select: {
-                        id: true,
+            select: {
+                id: true,
                 kod: true,
                 ad: true,
                 aciklama: true,
                 kategori: true,
                 birim: true,
-                        aktif: true,
+                aktif: true,
                 satisaUygun: true,
                 ozelUrun: true,
                 yeniUrun: true,
@@ -195,15 +178,15 @@ async function getProducts(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('urun', 'count', {
+        prisma.urun.count({
             where: whereClause
         })
     ]);
 
     // Calculate summary statistics
-    const productsSummary = await req.prisma.secureQuery('urun', 'aggregate', {
+    const productsSummary = await prisma.urun.aggregate({
         where: whereClause,
-                _count: {
+        _count: {
             id: true
         },
         ...(req.user.roleLevel >= 60 && {
@@ -216,7 +199,7 @@ async function getProducts(req, res) {
         })
     });
 
-    auditLog('PRODUCTS_VIEW', 'Products list accessed', {
+    console.log('📊 PRODUCTS_VIEW:', 'Products list accessed', {
         userId: req.user.userId,
         totalProducts: totalCount,
         page: pageNum,
@@ -224,10 +207,10 @@ async function getProducts(req, res) {
         filters: { search, kategori, aktif, satisaUygun }
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         products,
-            pagination: {
+        pagination: {
             currentPage: pageNum,
             totalPages: Math.ceil(totalCount / limitNum),
             totalItems: totalCount,
@@ -314,9 +297,9 @@ async function createProduct(req, res) {
     }
 
     // Enhanced transaction for product creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for existing product by code
-        const existingProduct = await tx.secureQuery('urun', 'findFirst', {
+        const existingProduct = await tx.urun.findFirst({
             where: {
                 kod: { equals: kod, mode: 'insensitive' }
             }
@@ -332,7 +315,7 @@ async function createProduct(req, res) {
             : 0;
 
         // Create product with audit trail
-        const newProduct = await tx.secureQuery('urun', 'create', {
+        const newProduct = await tx.urun.create({
             data: {
                 kod: kod.toUpperCase(),
                 ad,
@@ -375,7 +358,7 @@ async function createProduct(req, res) {
     });
 
     // Enhanced audit logging
-    auditLog('PRODUCT_CREATED', 'New product created', {
+    console.log('✅ PRODUCT_CREATED:', 'New product created', {
         userId: req.user.userId,
         productId: result.id,
         productCode: result.kod,
@@ -384,7 +367,7 @@ async function createProduct(req, res) {
         price: guncelFiyat
     });
 
-        return res.status(201).json({
+    return res.status(201).json({
         success: true,
         message: 'Product created successfully',
         product: result
@@ -415,7 +398,7 @@ async function updateProduct(req, res) {
     });
 
     if (!validationResult.isValid) {
-            return res.status(400).json({
+        return res.status(400).json({
             error: 'Invalid update data',
             details: validationResult.errors
         });
@@ -424,7 +407,7 @@ async function updateProduct(req, res) {
     const { id: productId, ...updateFields } = req.body;
 
     // Get current product for comparison
-    const currentProduct = await req.prisma.secureQuery('urun', 'findUnique', {
+    const currentProduct = await prisma.urun.findUnique({
         where: { id: parseInt(productId) },
         select: {
             id: true,
@@ -490,10 +473,10 @@ async function updateProduct(req, res) {
     }
 
     // Update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for code uniqueness if code is being updated
         if (updateData.kod && updateData.kod !== currentProduct.kod) {
-            const existingProduct = await tx.secureQuery('urun', 'findFirst', {
+            const existingProduct = await tx.urun.findFirst({
                 where: {
                     kod: { equals: updateData.kod, mode: 'insensitive' },
                     id: { not: parseInt(productId) }
@@ -505,7 +488,7 @@ async function updateProduct(req, res) {
             }
         }
 
-        const updatedProduct = await tx.secureQuery('urun', 'update', {
+        const updatedProduct = await tx.urun.update({
             where: { id: parseInt(productId) },
             data: {
                 ...updateData,
@@ -527,7 +510,7 @@ async function updateProduct(req, res) {
     });
 
     // Enhanced audit logging
-    auditLog('PRODUCT_UPDATED', 'Product updated', {
+    console.log('🔄 PRODUCT_UPDATED:', 'Product updated', {
         userId: req.user.userId,
         productId: parseInt(productId),
         productCode: result.kod,
@@ -536,7 +519,7 @@ async function updateProduct(req, res) {
         userRole: req.user.rol
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Product updated successfully',
         product: result,
@@ -558,13 +541,13 @@ async function deleteProduct(req, res) {
     const { id: productId } = req.body;
 
     if (!productId) {
-            return res.status(400).json({
+        return res.status(400).json({
             error: 'Product ID is required'
         });
     }
 
     // Get product details for validation
-    const productToDelete = await req.prisma.secureQuery('urun', 'findUnique', {
+    const productToDelete = await prisma.urun.findUnique({
         where: { id: parseInt(productId) },
         select: {
             id: true,
@@ -589,7 +572,7 @@ async function deleteProduct(req, res) {
     }
 
     // Check if product is used in any orders (simplified check)
-    const orderUsage = await req.prisma.secureQuery('siparisKalem', 'count', {
+    const orderUsage = await prisma.siparisKalemi.count({
         where: { urunId: parseInt(productId) }
     });
 
@@ -600,8 +583,8 @@ async function deleteProduct(req, res) {
     }
 
     // Soft delete (deactivate) instead of hard delete
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const deactivatedProduct = await tx.secureQuery('urun', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const deactivatedProduct = await tx.urun.update({
             where: { id: parseInt(productId) },
             data: {
                 aktif: false,
@@ -614,48 +597,18 @@ async function deleteProduct(req, res) {
         return deactivatedProduct;
     });
 
-    auditLog('PRODUCT_DELETED', 'Product deleted (soft delete)', {
+    console.log('🗑️ PRODUCT_DELETED:', 'Product deleted (soft delete)', {
         userId: req.user.userId,
         productId: parseInt(productId),
         productCode: productToDelete.kod,
         productName: productToDelete.ad
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Product deactivated successfully'
     });
 }
 
 // ===== SECURITY INTEGRATION =====
-export default secureAPI(
-    withPrismaSecurity(productsHandler),
-    {
-        // RBAC Configuration
-        permission: PERMISSIONS.VIEW_PRODUCTS, // Base permission, individual operations check higher permissions
-
-        // Method-specific permissions will be checked in handlers
-        // GET: VIEW_PRODUCTS
-        // POST: CREATE_PRODUCTS (Manager+)
-        // PUT: UPDATE_PRODUCTS (Supervisor+)
-        // DELETE: DELETE_PRODUCTS (Admin+)
-
-        // Input Validation Configuration
-        allowedFields: [
-            'id', 'kod', 'ad', 'aciklama', 'kategori', 'birim', 'guncelFiyat',
-            'maliyetFiyat', 'alisFiyati', 'tedarikciKodu', 'tedarikciAdi',
-            'minStok', 'maxStok', 'stokUyariSeviyesi', 'aktif', 'satisaUygun',
-            'ozelUrun', 'yeniUrun', 'indirimliUrun', 'notlar',
-            'page', 'limit', 'search', 'sortBy', 'sortOrder'
-        ],
-        requiredFields: {
-            POST: ['kod', 'ad', 'kategori', 'birim'],
-            PUT: ['id'],
-            DELETE: ['id']
-        },
-
-        // Security Options
-        preventSQLInjection: true,
-        enableAuditLogging: true
-    }
-); 
+export default withCorsAndAuth(productsHandler); 

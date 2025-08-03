@@ -98,7 +98,7 @@ async function getRecipes(req, res) {
     console.log('GET /api/receteler request received...');
 
     // Enhanced security transaction for recipe data
-    const recipeData = await req.prisma.secureTransaction(async (tx) => {
+    const recipeData = await prisma.$transaction(async (tx) => {
         // Build where clause for recipes
         const whereClause = {};
 
@@ -133,7 +133,7 @@ async function getRecipes(req, res) {
         }
 
         // Pagination and limits
-        const pageNum = Math.max(1, parseInt(page));
+        const pageNum = Math.max(1, parseInt(page) || 1);
         const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
         const skip = (pageNum - 1) * limitNum;
 
@@ -145,7 +145,7 @@ async function getRecipes(req, res) {
 
         // Get recipes with security filtering
         const [recipes, totalCount] = await Promise.all([
-            tx.secureQuery('recete', 'findMany', {
+            tx.recete.findMany({
                 where: whereClause,
                 select: {
                     id: true,
@@ -219,7 +219,7 @@ async function getRecipes(req, res) {
                 skip,
                 take: limitNum
             }),
-            tx.secureQuery('recete', 'count', {
+            tx.recete.count({
                 where: whereClause
             })
         ]);
@@ -227,7 +227,7 @@ async function getRecipes(req, res) {
         // Calculate recipe statistics (for managers+)
         let recipeStats = null;
         if (req.user.roleLevel >= 70 && includeCosts === 'true') {
-            recipeStats = await tx.secureQuery('recete', 'aggregate', {
+            recipeStats = await tx.recete.aggregate({
                 where: { ...whereClause, aktif: true },
                 _count: { id: true },
                 _avg: {
@@ -350,9 +350,9 @@ async function createRecipe(req, res) {
     }
 
     // Enhanced transaction for recipe creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Verify product exists
-        const product = await tx.secureQuery('urun', 'findUnique', {
+        const product = await tx.urun.findUnique({
             where: { id: parseInt(urunId) },
             select: {
                 id: true,
@@ -371,7 +371,7 @@ async function createRecipe(req, res) {
         }
 
         // Check for existing recipe for this product
-        const existingRecipe = await tx.secureQuery('recete', 'findFirst', {
+        const existingRecipe = await tx.recete.findFirst({
             where: {
                 urunId: parseInt(urunId),
                 aktif: true
@@ -386,7 +386,7 @@ async function createRecipe(req, res) {
         let totalCost = 0;
         const materialValidations = await Promise.all(
             receteKalemleri.map(async (item) => {
-                const material = await tx.secureQuery('material', 'findUnique', {
+                const material = await tx.material.findUnique({
                     where: { id: parseInt(item.materialId) },
                     select: {
                         id: true,
@@ -418,7 +418,7 @@ async function createRecipe(req, res) {
         );
 
         // Create recipe
-        const newRecipe = await tx.secureQuery('recete', 'create', {
+        const newRecipe = await tx.recete.create({
             data: {
                 ad,
                 aciklama: aciklama || '',
@@ -446,7 +446,7 @@ async function createRecipe(req, res) {
         // Create recipe items
         const recipeItems = await Promise.all(
             materialValidations.map(async (item, index) => {
-                return await tx.secureQuery('receteKalem', 'create', {
+                return await tx.receteKalemi.create({
                     data: {
                         receteId: newRecipe.id,
                         materialId: parseInt(item.materialId),
@@ -519,7 +519,7 @@ async function updateRecipe(req, res) {
     const { id: recipeId, receteKalemleri, ...updateFields } = req.body;
 
     // Get current recipe
-    const currentRecipe = await req.prisma.secureQuery('recete', 'findUnique', {
+    const currentRecipe = await prisma.recete.findUnique({
         where: { id: parseInt(recipeId) },
         select: {
             id: true,
@@ -530,10 +530,10 @@ async function updateRecipe(req, res) {
                 select: {
                     ad: true,
                     kod: true
-                        }
-                    }
                 }
-            });
+            }
+        }
+    });
 
     if (!currentRecipe) {
         return res.status(404).json({
@@ -542,13 +542,13 @@ async function updateRecipe(req, res) {
     }
 
     // Update recipe with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         let updatedCost = null;
 
         // If recipe items are being updated, recalculate costs
         if (receteKalemleri && Array.isArray(receteKalemleri)) {
             // Delete existing items
-            await tx.secureQuery('receteKalem', 'deleteMany', {
+            await tx.receteKalemi.deleteMany({
                 where: { receteId: parseInt(recipeId) }
             }, 'RECIPE_ITEMS_DELETED');
 
@@ -556,7 +556,7 @@ async function updateRecipe(req, res) {
             let totalCost = 0;
             const materialValidations = await Promise.all(
                 receteKalemleri.map(async (item) => {
-                    const material = await tx.secureQuery('material', 'findUnique', {
+                    const material = await tx.material.findUnique({
                         where: { id: parseInt(item.materialId) },
                         select: {
                             id: true,
@@ -584,7 +584,7 @@ async function updateRecipe(req, res) {
             // Create new items
             await Promise.all(
                 materialValidations.map(async (item, index) => {
-                    return await tx.secureQuery('receteKalem', 'create', {
+                    return await tx.receteKalemi.create({
                         data: {
                             receteId: parseInt(recipeId),
                             materialId: parseInt(item.materialId),
@@ -606,7 +606,7 @@ async function updateRecipe(req, res) {
         }
 
         // Update recipe
-        const updatedRecipe = await tx.secureQuery('recete', 'update', {
+        const updatedRecipe = await tx.recete.update({
             where: { id: parseInt(recipeId) },
             data: {
                 ...updateFields,
@@ -639,7 +639,7 @@ async function updateRecipe(req, res) {
         productionDataModification: true
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Recipe updated successfully',
         recipe: result
@@ -666,7 +666,7 @@ async function deleteRecipe(req, res) {
     }
 
     // Get recipe details for validation
-    const recipeToDelete = await req.prisma.secureQuery('recete', 'findUnique', {
+    const recipeToDelete = await prisma.recete.findUnique({
         where: { id: parseInt(recipeId) },
         select: {
             id: true,
@@ -688,7 +688,7 @@ async function deleteRecipe(req, res) {
     }
 
     // Business rule checks - Check if recipe is used in active production
-    const productionUsage = await req.prisma.secureQuery('siparis', 'count', {
+    const productionUsage = await prisma.siparis.count({
         where: {
             durum: { in: ['ONAYLANDI', 'HAZIRLANIYOR'] },
             siparisKalemleri: {
@@ -713,8 +713,8 @@ async function deleteRecipe(req, res) {
     }
 
     // Soft delete (deactivate) instead of hard delete for production records
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const deactivatedRecipe = await tx.secureQuery('recete', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const deactivatedRecipe = await tx.recete.update({
             where: { id: parseInt(recipeId) },
             data: {
                 aktif: false,
@@ -735,7 +735,7 @@ async function deleteRecipe(req, res) {
         productionDataDeletion: true
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Recipe deactivated successfully'
     });

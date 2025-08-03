@@ -94,9 +94,9 @@ async function getRecipeCost(req, res) {
     console.log('GET /api/receteler/maliyet request received...');
 
     // Enhanced security transaction for cost analysis
-    const costData = await req.prisma.secureTransaction(async (tx) => {
+    const costData = await prisma.$transaction(async (tx) => {
         // Get recipe with cost details
-        const recipe = await tx.secureQuery('recete', 'findUnique', {
+        const recipe = await tx.recete.findUnique({
             where: { id: parseInt(recipeId) },
             select: {
                 id: true,
@@ -307,12 +307,12 @@ async function calculateRecipeCost(req, res) {
     }
 
     // Enhanced transaction for cost calculation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         let itemsToCalculate = [];
 
         if (recipeId) {
             // Get existing recipe items
-            const recipe = await tx.secureQuery('recete', 'findUnique', {
+            const recipe = await tx.recete.findUnique({
                 where: { id: parseInt(recipeId) },
                 select: {
                     id: true,
@@ -345,7 +345,7 @@ async function calculateRecipeCost(req, res) {
         let totalCost = 0;
         const calculationBreakdown = await Promise.all(
             itemsToCalculate.map(async (item) => {
-                const material = await tx.secureQuery('material', 'findUnique', {
+                const material = await tx.material.findUnique({
                     where: { id: parseInt(item.materialId) },
                     select: {
                         id: true,
@@ -394,7 +394,7 @@ async function calculateRecipeCost(req, res) {
         // Update stored costs if requested and user has permission
         let updatedRecipe = null;
         if (updateStored && recipeId && req.user.roleLevel >= 70) {
-            updatedRecipe = await tx.secureQuery('recete', 'update', {
+            updatedRecipe = await tx.recete.update({
                 where: { id: parseInt(recipeId) },
                 data: {
                     toplamMaliyet: totalCost,
@@ -407,7 +407,7 @@ async function calculateRecipeCost(req, res) {
             // Update individual recipe items
             await Promise.all(
                 calculationBreakdown.map(async (item) => {
-                    return await tx.secureQuery('receteKalem', 'updateMany', {
+                    return await tx.receteKalemi.updateMany({
                         where: {
                             receteId: parseInt(recipeId),
                             materialId: item.materialId
@@ -496,7 +496,7 @@ async function recalculateAllRecipeCosts(req, res) {
     }
 
     // Enhanced transaction for bulk recalculation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Build where clause
         const whereClause = {};
         if (recipeIds && Array.isArray(recipeIds)) {
@@ -507,7 +507,7 @@ async function recalculateAllRecipeCosts(req, res) {
         }
 
         // Get all recipes to recalculate
-        const recipes = await tx.secureQuery('recete', 'findMany', {
+        const recipes = await tx.recete.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -551,7 +551,7 @@ async function recalculateAllRecipeCosts(req, res) {
                 totalCostChange += costChange;
 
                 // Update recipe
-                await tx.secureQuery('recete', 'update', {
+                await tx.recete.update({
                     where: { id: recipe.id },
                     data: {
                         toplamMaliyet: newTotalCost,

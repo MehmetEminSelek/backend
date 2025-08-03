@@ -55,7 +55,7 @@ async function paymentHandler(req, res) {
  */
 async function getPayments(req, res, siparisId) {
     // Database query with security context
-    const payments = await req.prisma.secureQuery('odeme', 'findMany', {
+    const payments = await prisma.odeme.findMany({
         where: {
             siparisId: parseInt(siparisId)
         },
@@ -115,9 +115,9 @@ async function createPayment(req, res, siparisId) {
     }
 
     // Secure transaction with enhanced logging
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // 1. Get order details
-        const siparis = await tx.secureQuery('siparisFormu', 'findUnique', {
+        const siparis = await tx.siparis.findUnique({
             where: { id: parseInt(siparisId) },
             include: {
                 cari: {
@@ -138,7 +138,7 @@ async function createPayment(req, res, siparisId) {
         // 2. Create customer if missing (enhanced security)
         let cariMusteri = siparis.cari;
         if (!cariMusteri && siparis.musteriAd) {
-            cariMusteri = await tx.secureQuery('cariMusteri', 'create', {
+            cariMusteri = await tx.cariMusteri.create({
                 data: {
                     ad: siparis.musteriAd,
                     telefon: siparis.musteriTelefon || '',
@@ -150,14 +150,14 @@ async function createPayment(req, res, siparisId) {
             }, 'CUSTOMER_AUTO_CREATED');
 
             // Link customer to order
-            await tx.secureQuery('siparisFormu', 'update', {
+            await tx.siparis.update({
                 where: { id: parseInt(siparisId) },
                 data: { musteriId: cariMusteri.id }
             }, 'ORDER_CUSTOMER_LINKED');
         }
 
         // 3. Calculate payment totals
-        const existingPayments = await tx.secureQuery('odeme', 'findMany', {
+        const existingPayments = await tx.odeme.findMany({
             where: { siparisId: parseInt(siparisId) }
         });
 
@@ -169,7 +169,7 @@ async function createPayment(req, res, siparisId) {
         }
 
         // 4. Create payment record
-        const payment = await tx.secureQuery('odeme', 'create', {
+        const payment = await tx.odeme.create({
             data: {
                 siparisId: parseInt(siparisId),
                 miktar: parseFloat(miktar),
@@ -184,7 +184,7 @@ async function createPayment(req, res, siparisId) {
         // 5. Update order status if fully paid
         const isFullyPaid = newTotal >= siparis.toplamTutar;
         if (isFullyPaid && siparis.durum !== 'odeme_tamamlandi') {
-            await tx.secureQuery('siparisFormu', 'update', {
+            await tx.siparis.update({
                 where: { id: parseInt(siparisId) },
                 data: {
                     durum: 'odeme_tamamlandi',
@@ -253,7 +253,7 @@ async function updatePayment(req, res, siparisId) {
     if (req.body.durum) updateData.durum = req.body.durum;
 
     // Update with security context
-    const updatedPayment = await req.prisma.secureQuery('odeme', 'update', {
+    const updatedPayment = await prisma.odeme.update({
         where: {
             id: parseInt(paymentId),
             siparisId: parseInt(siparisId) // Ensure payment belongs to this order
