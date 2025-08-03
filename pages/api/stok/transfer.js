@@ -1,4 +1,5 @@
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
+import { auditLoggingMiddleware } from '../../../middleware/audit-logging.js';
 // import { verifyAuth } from '../../../lib/auth'; // GELİŞTİRME İÇİN GEÇİCİ OLARAK KAPALI
 
 export default async function handler(req, res) {
@@ -27,17 +28,17 @@ export default async function handler(req, res) {
 
             // Transfer işlemini gerçekleştir
             const transfer = await prisma.stokTransfer.create({
-                    data: {
+                data: {
                     kaynakSubeId,
                     hedefSubeId,
                     materialId,
                     urunId,
                     miktar,
                     birim: birim || 'KG',
-                        aciklama,
+                    aciklama,
                     createdBy: 1, // Geçici olarak admin user ID
                     durum: 'BEKLIYOR'
-                    }
+                }
             });
 
             return res.status(200).json({ message: 'Transfer başarılı.' });

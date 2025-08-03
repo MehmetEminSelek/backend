@@ -1,4 +1,4 @@
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 
 // Yardımcı fonksiyon: Reçeteyi çöz ve malzemeleri bul
 async function resolveRecipeMaterials(urunId, miktar) {
@@ -173,7 +173,7 @@ export default async function handler(req, res) {
 
         // Sipariş açıklamasına işaret ve uyarıları ekle
         let siparisNotu = (siparis.siparisNotu || '') + ' [STOK DÜŞÜLDÜ]';
-        
+
         if (uyarilar.length > 0) {
             siparisNotu += ` [UYARILAR: ${uyarilar.length} ürün reçetesi eksik]`;
             console.warn(`⚠️ ${uyarilar.length} ürün için reçete bulunamadı:`, uyarilar);

@@ -1,4 +1,4 @@
-import prisma from '../../../../lib/prisma';
+import prisma from '../../../../lib/prisma.js';
 // import { verifyAuth } from '../../../../lib/auth'; // GELİŞTİRME İÇİN GEÇİCİ OLARAK KAPALI
 
 export default async function handler(req, res) {

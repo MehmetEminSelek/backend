@@ -1,5 +1,5 @@
 // pages/api/orders.js
-import prisma from '../../lib/prisma';
+import prisma from '../../lib/prisma.js';
 import { Prisma } from '@prisma/client';
 import { recalculateOrderItemPrices } from '../../lib/fiyat'; // Yeni fiyatlandırma sistemi
 

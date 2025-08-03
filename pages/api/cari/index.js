@@ -330,6 +330,28 @@ async function createCustomer(req, res) {
         customerPhone: telefon
     });
 
+    // ✅ AUDIT LOG: Customer created
+    try {
+        await auditLog({
+            personelId: req.user?.personelId || req.user?.id,
+            action: 'CARI_OLUSTURULDU',
+            tableName: 'CARI',
+            recordId: result.id,
+            oldValues: null,
+            newValues: {
+                musteriKodu: result.musteriKodu,
+                ad: result.ad,
+                soyad: result.soyad,
+                telefon: result.telefon,
+                tipi: result.tipi
+            },
+            description: `Yeni cari oluşturuldu: ${result.musteriKodu} - ${result.ad} ${result.soyad || ''}`.trim(),
+            req
+        });
+    } catch (auditError) {
+        console.error('❌ Customer creation audit log failed:', auditError);
+    }
+
     return res.status(201).json({
         success: true,
         message: 'Customer created successfully',
@@ -339,9 +361,7 @@ async function createCustomer(req, res) {
 
 // ===== SECURITY INTEGRATION =====
 import { requireAuth } from '../../../lib/simple-auth.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+// Prisma already imported above
 
 async function handler(req, res) {
     // Simple auth zaten user'ı req'e ekledi

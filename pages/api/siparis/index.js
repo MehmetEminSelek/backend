@@ -417,8 +417,8 @@ async function createOrder(req, res) {
 
             processedKalemler.push({
                 urunId: parseInt(kalem.urunId),
-                    kutuId: kalem.kutuId ? parseInt(kalem.kutuId) : null,
-                    tepsiTavaId: kalem.tepsiTavaId ? parseInt(kalem.tepsiTavaId) : null,
+                kutuId: kalem.kutuId ? parseInt(kalem.kutuId) : null,
+                tepsiTavaId: kalem.tepsiTavaId ? parseInt(kalem.tepsiTavaId) : null,
                 miktar: parseFloat(kalem.miktar),
                 birim: kalem.birim || 'adet',
                 birimFiyat: priceResult.birimFiyat,
@@ -520,6 +520,27 @@ async function createOrder(req, res) {
         hasDiscount: indirimTutari > 0,
         discountAmount: indirimTutari
     });
+
+    // ✅ AUDIT LOG: Order created
+    try {
+        await auditLog({
+            personelId: req.user?.personelId || req.user?.id,
+            action: 'SIPARIS_OLUSTURULDU',
+            tableName: 'SIPARIS',
+            recordId: result.order.id,
+            oldValues: null,
+            newValues: {
+                sipariNo: result.order.sipariNo,
+                musteriAd: result.order.musteriAd,
+                toplamTutar: result.order.toplamTutar,
+                kalemSayisi: kalemler.length
+            },
+            description: `Yeni sipariş oluşturuldu: ${result.order.sipariNo} - ${musteriAd} (₺${result.order.toplamTutar})`,
+            req
+        });
+    } catch (auditError) {
+        console.error('❌ Order creation audit log failed:', auditError);
+    }
 
     return res.status(201).json({
         success: true,

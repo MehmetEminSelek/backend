@@ -1,7 +1,7 @@
 // pages/api/kategoriler/index.js
 // Ürün Kategorileri Yönetimi API'si
 
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 
 export default async function handler(req, res) {
     // CORS headers ekle

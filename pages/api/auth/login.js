@@ -1,4 +1,4 @@
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 import bcrypt from 'bcrypt';
 import { generateAccessToken, generateRefreshToken } from '../../../lib/auth.js';
 import { auditLog } from '../../../lib/audit-logger.js';
@@ -97,15 +97,10 @@ function validateLoginInput(kullaniciAdi, sifre) {
     return errors;
 }
 
-export default async function handler(req, res) {
-    // Security headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+async function handler(req, res) {
+    // Security headers for caching
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
-
-    if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method !== 'POST') {
         return res.status(405).json({
@@ -272,7 +267,7 @@ export default async function handler(req, res) {
                         { mevcutStok: { lte: 0 } },
                         {
                             AND: [
-                                { kritikSeviye: { not: null } },
+                                { kritikSeviye: { not: { equals: null } } },
                                 {
                                     mevcutStok: {
                                         lte: 10  // Kritik seviyenin altında olan stoklar
@@ -315,6 +310,43 @@ export default async function handler(req, res) {
             console.error('❌ Stok uyarıları kontrol edilemedi:', stokError);
         }
 
+        // Generate session expiry (24 hours from now)
+        const sessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // Generate CSRF token
+        const crypto = await import('crypto');
+        const csrfToken = crypto.randomBytes(32).toString('hex');
+
+        // Calculate role level based on role
+        const roleLevels = {
+            'GENEL_MUDUR': 100,
+            'SUBE_MUDURU': 90,
+            'URETIM_MUDURU': 80,
+            'SEVKIYAT_MUDURU': 80,
+            'CEP_DEPO_MUDURU': 80,
+            'SUBE_PERSONELI': 50,
+            'URETIM_PERSONEL': 50,
+            'SEVKIYAT_PERSONELI': 50,
+            'SOFOR': 40,
+            'PERSONEL': 30
+        };
+
+        // ✅ AUDIT LOG: Successful login
+        try {
+            await auditLog({
+                personelId: user.personelId,
+                action: 'LOGIN_SUCCESS',
+                tableName: 'USER',
+                recordId: user.id,
+                oldValues: null,
+                newValues: { loginTime: new Date(), ip: req.ip, userAgent: req.headers['user-agent'] },
+                description: `Başarılı giriş: ${user.ad} (${user.rol})`,
+                req
+            });
+        } catch (auditError) {
+            console.error('❌ Login audit log failed:', auditError);
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Giriş başarılı',
@@ -323,10 +355,14 @@ export default async function handler(req, res) {
                 ad: user.ad,
                 email: user.email,
                 rol: user.rol,
-                personelId: user.personelId
+                roleLevel: roleLevels[user.rol] || 30,
+                personelId: user.personelId,
+                username: user.username
             },
             accessToken,
             refreshToken,
+            sessionExpiry,
+            csrfToken,
             stokUyarilari
         });
 
@@ -361,4 +397,8 @@ export default async function handler(req, res) {
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
-} 
+}
+
+// Export with CORS wrapper
+import { withCorsOnly } from '../../../lib/cors-wrapper.js';
+export default withCorsOnly(handler); 

@@ -3,7 +3,7 @@
 // Sadeleştirilmiş ve audit log entegreli üretim planı yönetimi
 // ===================================================================
 
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 import { createAuditLog } from '../../../lib/audit-logger';
 import { calculateProductionPlanCost, calculateMaterialRequirements } from '../../../lib/reports/cost-calculator';
 

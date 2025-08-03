@@ -1,9 +1,7 @@
 // pages/api/urunler/[id]/recete-maliyet.js
 // Ürün reçetesi ve maliyet hesaplama API'si
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../../../../lib/prisma.js';
 
 export default async function handler(req, res) {
     // CORS headers

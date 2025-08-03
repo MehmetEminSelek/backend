@@ -9,15 +9,24 @@ import { withPrismaSecurity } from '../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../lib/rbac-enhanced.js';
 import { auditLog } from '../../lib/audit-logger.js';
 import { validateInput } from '../../lib/validation.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../../lib/prisma.js';
 
 /**
  * Dropdown API Handler with Full Security Integration
  */
 async function dropdownHandler(req, res) {
   const { method } = req;
+
+  console.log('🔍 Dropdown API called:', {
+    method,
+    hasUser: !!req.user,
+    userId: req.user?.id,
+    userRole: req.user?.rol,
+    headers: {
+      authorization: req.headers.authorization?.substring(0, 20) + '...',
+      origin: req.headers.origin
+    }
+  });
 
   try {
     switch (method) {
@@ -275,7 +284,7 @@ async function getDropdownData(req, res) {
 }
 
 // ===== SECURITY INTEGRATION =====
-import { requireAuth } from '../../lib/simple-auth.js';
+import { withCorsAndAuth } from '../../lib/cors-wrapper.js';
 
-export default requireAuth(dropdownHandler);
+export default withCorsAndAuth(dropdownHandler);
 

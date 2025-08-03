@@ -1,4 +1,4 @@
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,17 +18,17 @@ export default async function handler(req, res) {
 
             // Toplamlar
             const [giris, cikis, transfer] = await Promise.all([
-                prisma.stokHareket.aggregate({ 
-                    _sum: { miktar: true }, 
-                    where: { ...where, tip: 'GIRIS' } 
+                prisma.stokHareket.aggregate({
+                    _sum: { miktar: true },
+                    where: { ...where, tip: 'GIRIS' }
                 }),
-                prisma.stokHareket.aggregate({ 
-                    _sum: { miktar: true }, 
-                    where: { ...where, tip: 'CIKIS' } 
+                prisma.stokHareket.aggregate({
+                    _sum: { miktar: true },
+                    where: { ...where, tip: 'CIKIS' }
                 }),
-                prisma.stokHareket.aggregate({ 
-                    _sum: { miktar: true }, 
-                    where: { ...where, tip: 'TRANSFER' } 
+                prisma.stokHareket.aggregate({
+                    _sum: { miktar: true },
+                    where: { ...where, tip: 'TRANSFER' }
                 })
             ]);
 
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
 
             // Kritik seviyedeki materyaller
             const kritikMateryaller = await prisma.material.findMany({
-                where: { 
+                where: {
                     mevcutStok: { lte: prisma.material.fields.kritikSeviye }
                 },
                 select: {

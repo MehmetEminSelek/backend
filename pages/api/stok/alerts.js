@@ -1,4 +1,4 @@
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 
 // Stok Uyarıları API - Kritik ve Negatif Stokları Döndürür
 export default async function handler(req, res) {
@@ -42,7 +42,7 @@ export default async function handler(req, res) {
         const kritikStoklar = tumMateriallar.filter(m => {
             const mevcutStok = m.mevcutStok || 0;
             const kritikSeviye = m.kritikSeviye || m.minStokSeviye || 10;
-            
+
             // Negatif veya kritik seviyenin altında
             return mevcutStok <= 0 || mevcutStok <= kritikSeviye;
         });

@@ -3,7 +3,7 @@
 // Frontend uyumluluğu için eski endpoint'i koruyor, yeni API'ye yönlendiriyor
 // ===================================================================
 
-import prisma from '../../lib/prisma';
+import prisma from '../../lib/prisma.js';
 import { createAuditLog } from '../../lib/audit-logger';
 import { calculateOrderCost, calculatePeriodCostAnalysis } from '../../lib/reports/cost-calculator';
 

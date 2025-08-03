@@ -1,0 +1,16 @@
+/**
+ * DEPRECATED - DO NOT USE IN PRODUCTION
+ * 
+ * This file has been disabled for security reasons.
+ * Use /api/auth/login instead which includes:
+ * - Rate limiting
+ * - Failed login attempt tracking
+ * - Account locking
+ * - Audit logging
+ * - Proper security headers
+ * 
+ * This simple login endpoint lacks critical security features
+ * and should never be used in production environments.
+ */
+
+// Original content moved to .disabled extension to prevent usage
