@@ -125,7 +125,7 @@ async function getOrders(req, res) {
     // Search filtering
     if (search) {
         whereClause.OR = [
-                            { siparisNo: { contains: search, mode: 'insensitive' } },
+            { siparisNo: { contains: search, mode: 'insensitive' } },
             { gonderenAdi: { contains: search, mode: 'insensitive' } },
             { gonderenTel: { contains: search } },
             { siparisNotu: { contains: search, mode: 'insensitive' } }
@@ -495,7 +495,7 @@ async function createOrder(req, res) {
     console.log('ORDER_CREATED:', 'New order created', {
         userId: req.user.userId,
         orderId: result.order.id,
-                    orderNumber: result.order.siparisNo,
+        orderNumber: result.order.siparisNo,
         customerId: result.customer.id,
         customerName: gonderenAdi,
         totalAmount: result.order.toplamTutar,

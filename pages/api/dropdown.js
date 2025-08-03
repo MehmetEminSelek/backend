@@ -197,6 +197,44 @@ async function getDropdownData(req, res) {
       }));
     }
 
+    // Personeller - Available for all logged users
+    if (!category || category === 'personeller') {
+      const personeller = await prisma.user.findMany({
+        where: {
+          aktif: true
+        },
+        select: {
+          id: true,
+          personelId: true,
+          ad: true,
+          soyad: true,
+          telefon: true,
+          rol: true,
+          aktif: true,
+          sube: {
+            select: {
+              id: true,
+              ad: true
+            }
+          }
+        },
+        orderBy: { ad: 'asc' }
+      });
+
+      // Frontend uyumluluğu için field mapping
+      results.personeller = personeller.map(personel => ({
+        id: personel.id,
+        personelId: personel.personelId,
+        ad: personel.ad,
+        soyad: personel.soyad || '',
+        displayName: `${personel.ad} ${personel.soyad || ''}`.trim(),
+        telefon: personel.telefon,
+        rol: personel.rol,
+        sube: personel.sube,
+        aktif: personel.aktif
+      }));
+    }
+
     // Tepsi/Tava - Available for all logged users
     if (!category || category === 'tepsiTavalar') {
       results.tepsiTavalar = await prisma.tepsiTava.findMany({
