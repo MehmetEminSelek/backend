@@ -125,7 +125,7 @@ async function getOrders(req, res) {
     // Search filtering
     if (search) {
         whereClause.OR = [
-            { sipariNo: { contains: search, mode: 'insensitive' } },
+                            { siparisNo: { contains: search, mode: 'insensitive' } },
             { gonderenAdi: { contains: search, mode: 'insensitive' } },
             { gonderenTel: { contains: search } },
             { siparisNotu: { contains: search, mode: 'insensitive' } }
@@ -147,7 +147,7 @@ async function getOrders(req, res) {
             where: whereClause,
             select: {
                 id: true,
-                sipariNo: true,
+                siparisNo: true,
                 tarih: true,
                 durum: true,
                 odemeDurumu: true, // Şimdi schema'da mevcut
@@ -477,7 +477,7 @@ async function createOrder(req, res) {
                         miktar: -kalem.miktar,
                         referansId: newOrder.id,
                         referansTip: 'SIPARIS',
-                        aciklama: `Sipariş rezervasyonu: ${sipariNo}`,
+                        aciklama: `Sipariş rezervasyonu: ${siparisNo}`,
                         olusturanKullanici: req.user.userId
                     }
                 });
@@ -495,7 +495,7 @@ async function createOrder(req, res) {
     console.log('ORDER_CREATED:', 'New order created', {
         userId: req.user.userId,
         orderId: result.order.id,
-        orderNumber: result.order.sipariNo,
+                    orderNumber: result.order.siparisNo,
         customerId: result.customer.id,
         customerName: gonderenAdi,
         totalAmount: result.order.toplamTutar,
@@ -513,12 +513,12 @@ async function createOrder(req, res) {
             recordId: result.order.id,
             oldValues: null,
             newValues: {
-                sipariNo: result.order.sipariNo,
+                siparisNo: result.order.siparisNo,
                 gonderenAdi: result.order.gonderenAdi,
                 toplamTutar: result.order.toplamTutar,
                 kalemSayisi: kalemler.length
             },
-            description: `Yeni sipariş oluşturuldu: ${result.order.sipariNo} - ${gonderenAdi} (₺${result.order.toplamTutar})`,
+            description: `Yeni sipariş oluşturuldu: ${result.order.siparisNo} - ${gonderenAdi} (₺${result.order.toplamTutar})`,
             req
         });
     } catch (auditError) {
@@ -530,7 +530,7 @@ async function createOrder(req, res) {
         message: 'Order created successfully',
         order: {
             id: result.order.id,
-            sipariNo: result.order.sipariNo,
+            siparisNo: result.order.siparisNo,
             tarih: result.order.tarih,
             durum: result.order.durum,
             toplamTutar: result.order.toplamTutar,

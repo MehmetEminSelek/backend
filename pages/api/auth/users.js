@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
 import { auditLog } from '../../../lib/audit-logger.js';
 import { validateInput } from '../../../lib/validation.js';
+import { prisma } from '../../../lib/prisma.js';
 import bcrypt from 'bcrypt';
 
 /**

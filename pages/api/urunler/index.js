@@ -69,7 +69,7 @@ async function getProducts(req, res) {
 
     // Convert to safe numbers
     const pageNum = Math.max(1, parseInt(page) || 1);
-    // limitNum already defined above
+    const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
 
     // Build secure where clause
     const whereClause = {};
