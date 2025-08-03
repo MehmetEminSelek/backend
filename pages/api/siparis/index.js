@@ -86,15 +86,15 @@ async function getOrders(req, res) {
 
     // Status filtering
     if (durum) {
-        const validStatuses = ['beklemede', 'onaylandi', 'hazirlaniyor', 'hazir', 'kargoda', 'teslim_edildi', 'iptal'];
+        const validStatuses = ['ONAY_BEKLEYEN', 'ONAYLANDI', 'HAZIRLANIYOR', 'HAZIR', 'KARGODA', 'TESLIM_EDILDI', 'IPTAL'];
         if (validStatuses.includes(durum)) {
-            whereClause.durum = durum;
+            whereClause.durum = durum.toUpperCase();
         }
     }
 
     // Customer filtering
     if (musteriId) {
-        whereClause.musteriId = parseInt(musteriId);
+        whereClause.cariId = parseInt(musteriId); // Use correct relation field
     }
 
     // Branch filtering
@@ -163,12 +163,12 @@ async function getOrders(req, res) {
                     toplamMaliyet: true,
                     karMarji: true
                 }),
-                musteri: {
+                cari: {
                     select: {
                         id: true,
-                        ad: true,
+                        cariAdi: true,
                         telefon: true,
-                        email: true
+                        musteriKodu: true
                     }
                 },
                 sube: {
@@ -183,7 +183,10 @@ async function getOrders(req, res) {
                         id: true,
                         miktar: true,
                         birimFiyat: true,
-                        toplamFiyat: true,
+                        birim: true,
+                        toplamTutar: true, // Correct field name from schema
+                        urunAdi: true, // Snapshot field from schema
+                        urunKodu: true, // Snapshot field from schema
                         urun: {
                             select: {
                                 id: true,
@@ -192,6 +195,12 @@ async function getOrders(req, res) {
                             }
                         },
                         kutu: {
+                            select: {
+                                id: true,
+                                ad: true
+                            }
+                        },
+                        tepsiTava: {
                             select: {
                                 id: true,
                                 ad: true
@@ -321,11 +330,21 @@ async function createOrder(req, res) {
         }
     }
 
-    // Validate order items
+    // Validate order items with detailed error messages
     for (const kalem of kalemler) {
-        if (!kalem.urunId || !kalem.miktar || kalem.miktar <= 0) {
+        if (!kalem.urunId) {
             return res.status(400).json({
-                error: 'Each order item must have valid product ID and quantity'
+                error: 'Product ID is required for each order item'
+            });
+        }
+        if (!kalem.miktar || kalem.miktar <= 0) {
+            return res.status(400).json({
+                error: `Invalid quantity ${kalem.miktar} for product ${kalem.urunId}. Quantity must be greater than 0`
+            });
+        }
+        if (kalem.birim && !['Gram', 'Adet', 'Kg', 'Paket', 'Kutu', 'Tepsi', 'Litre', 'Ml'].includes(kalem.birim)) {
+            return res.status(400).json({
+                error: `Invalid unit '${kalem.birim}' for product ${kalem.urunId}. Allowed units: Gram, Adet, Kg, Paket, Kutu, Tepsi, Litre, Ml`
             });
         }
     }
@@ -380,7 +399,7 @@ async function createOrder(req, res) {
             // Validate product exists and is active
             const urun = await tx.urun.findUnique({
                 where: { id: parseInt(kalem.urunId) },
-                select: { id: true, ad: true, aktif: true, kategori: true }
+                select: { id: true, ad: true, kod: true, aktif: true, kategori: true }
             });
 
             if (!urun || !urun.aktif) {
@@ -399,24 +418,56 @@ async function createOrder(req, res) {
                 throw new Error(`Price calculation failed for product ${kalem.urunId}`);
             }
 
-            const kalemToplam = priceResult.toplamFiyat;
-            const kalemMaliyet = priceResult.toplamMaliyet || 0;
+            // Remove old calculation variables - we'll use new ones below
 
-            toplamTutar += kalemToplam;
-            toplamMaliyet += kalemMaliyet;
+            // Calculate pricing with proper field names matching schema
+            const kalemAraToplam = parseFloat(kalem.miktar) * priceResult.birimFiyat;
+            const kdvOrani = 18; // Default KDV
+            const iskonto = parseFloat(kalem.iskonto) || 0;
+            const kalemKdvTutari = (kalemAraToplam * kdvOrani) / 100;
+            const kalemToplamTutar = kalemAraToplam + kalemKdvTutari - iskonto;
+            const birimMaliyet = priceResult.maliyetBirimFiyat || 0;
+            const kalemToplamMaliyet = birimMaliyet * parseFloat(kalem.miktar);
+            const kalemKarMarji = kalemToplamTutar - kalemToplamMaliyet;
+            const kalemKarOrani = kalemToplamTutar > 0 ? ((kalemKarMarji / kalemToplamTutar) * 100) : 0;
+
+            // Map frontend birim values to backend enum values
+            const birimMapping = {
+                'Gram': 'GRAM',
+                'Adet': 'ADET', 
+                'Kg': 'KG',
+                'Paket': 'PAKET',
+                'Kutu': 'KUTU',
+                'Tepsi': 'TEPSI',
+                'Litre': 'LITRE',
+                'Ml': 'ML'
+            };
+            const mappedBirim = birimMapping[kalem.birim] || kalem.birim?.toUpperCase() || 'ADET';
 
             processedKalemler.push({
                 urunId: parseInt(kalem.urunId),
+                urunAdi: urun.ad, // SNAPSHOT: Store product name
+                urunKodu: urun.kod || null, // SNAPSHOT: Store product code from schema
                 kutuId: kalem.kutuId ? parseInt(kalem.kutuId) : null,
                 tepsiTavaId: kalem.tepsiTavaId ? parseInt(kalem.tepsiTavaId) : null,
                 miktar: parseFloat(kalem.miktar),
-                birim: kalem.birim || 'adet',
+                birim: mappedBirim, // Use mapped enum value
                 birimFiyat: priceResult.birimFiyat,
-                toplamFiyat: kalemToplam,
-                maliyetBirimFiyat: priceResult.maliyetBirimFiyat || 0,
-                maliyetToplam: kalemMaliyet,
-                aciklama: kalem.siparisNotu || ''
+                kdvOrani: kdvOrani,
+                iskonto: iskonto,
+                araToplam: kalemAraToplam,
+                kdvTutari: kalemKdvTutari,
+                toplamTutar: kalemToplamTutar,
+                birimMaliyet: birimMaliyet,
+                toplamMaliyet: kalemToplamMaliyet,
+                karMarji: kalemKarMarji,
+                karOrani: kalemKarOrani,
+                uretimNotu: kalem.siparisNotu || null
             });
+
+            // Update totals for order (use different variable names to avoid conflict)
+            toplamTutar += kalemToplamTutar;
+            toplamMaliyet += kalemToplamMaliyet;
         }
 
         // Apply discount if provided and user has permission
