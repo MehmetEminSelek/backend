@@ -163,31 +163,38 @@ async function getDropdownData(req, res) {
       });
     }
 
-    // Customers - Available for all logged users (basic info)
+    // Customers - Available for all logged users
     if (!category || category === 'cariler') {
-      results.cariler = await prisma.cariMusteri.findMany({
+      const cariMusteriler = await prisma.cariMusteri.findMany({
         where: activeWhere,
         select: {
           id: true,
           musteriKodu: true,
-          aktif: true,
-
-          // Basic data for managers+
-          ...(req.user.roleLevel >= 70 && {
-            cariAdi: true,
-            subeAdi: true,
-            cariGrubu: true,
-            fiyatGrubu: true
-          }),
-
-          // Contact info only for administrators
-          ...(req.user.roleLevel >= 80 && format === 'detailed' && {
-            telefon: true,
-            irtibatAdi: true
-          })
+          cariAdi: true,
+          subeAdi: true,
+          telefon: true,
+          irtibatAdi: true,
+          cariGrubu: true,
+          fiyatGrubu: true,
+          aktif: true
         },
         orderBy: { musteriKodu: 'asc' }
       });
+
+      // Frontend uyumluluğu için field mapping
+      results.cariler = cariMusteriler.map(cari => ({
+        id: cari.id,
+        ad: cari.cariAdi,  // cariAdi -> ad
+        soyad: cari.irtibatAdi || '',  // irtibatAdi -> soyad
+        telefon: cari.telefon,
+        musteriKodu: cari.musteriKodu,
+        subeAdi: cari.subeAdi,
+        cariGrubu: cari.cariGrubu,
+        fiyatGrubu: cari.fiyatGrubu,
+        aktif: cari.aktif,
+        // Adresler için placeholder - gerçek adresler ayrı API'den gelecek
+        adresler: []
+      }));
     }
 
     // Tepsi/Tava - Available for all logged users

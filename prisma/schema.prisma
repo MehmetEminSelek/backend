@@ -423,8 +423,14 @@ model Cari {
 // YENİ MODEL: Cari Adres Yönetimi
 model CariAdres {
   id     Int  @id @default(autoincrement())
-  cariId Int
-  cari   Cari @relation(fields: [cariId], references: [id], onDelete: Cascade)
+  
+  // Ana Cari relation
+  cariId Int?
+  cari   Cari? @relation(fields: [cariId], references: [id], onDelete: Cascade)
+  
+  // CariMusteri relation - CSV'den gelen müşteriler için
+  cariMusteriId Int?
+  cariMusteri   CariMusteri? @relation(fields: [cariMusteriId], references: [id], onDelete: Cascade)
 
   // Adres Bilgileri
   tip          AdresTipi @default(DIGER)
@@ -444,6 +450,7 @@ model CariAdres {
   updatedAt    DateTime @updatedAt
 
   @@index([cariId])
+  @@index([cariMusteriId])
   @@index([tip])
   @@index([varsayilan])
 }
@@ -481,6 +488,9 @@ model CariMusteri {
   // İlerleyen süreçte ana Cari tablosu ile ilişki kurulabilir
   cariId      Int?    // Ana Cari kaydı ile eşleştirme için
   cari        Cari?   @relation(fields: [cariId], references: [id])
+  
+  // Adres relation
+  adresler    CariAdres[]
   
   // Audit
   createdAt   DateTime @default(now())

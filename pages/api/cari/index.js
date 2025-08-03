@@ -111,7 +111,7 @@ async function getCustomers(req, res) {
  */
 async function createCustomer(req, res) {
     const {
-        cariAdi, telefon, musteriKodu, subeAdi, irtibatAdi, 
+        cariAdi, telefon, musteriKodu, subeAdi, irtibatAdi,
         cariGrubu, fiyatGrubu, aktif = true
     } = req.body;
 
