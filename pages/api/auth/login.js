@@ -332,8 +332,8 @@ async function handler(req, res) {
             'URETIM_PERSONEL': 50,
             'SEVKIYAT_PERSONELI': 50,
             'SOFOR': 40,
-            'PERSONEL': 30,
-            'VIEWER': 25  // VIEWER rolü eklendi
+            'PERSONEL': 30
+            // VIEWER rolü schema'da yok - kaldırıldı
         };
 
         // ✅ AUDIT LOG: Successful login

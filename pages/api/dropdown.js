@@ -96,8 +96,8 @@ async function getDropdownData(req, res) {
       });
     }
 
-    // Branches - Role-based access
-    if ((!category || category === 'subeler') && req.user.roleLevel >= 50) {
+    // Branches - Available for all logged users
+    if (!category || category === 'subeler') {
       results.subeler = await prisma.sube.findMany({
         where: activeWhere,
         select: {
@@ -138,8 +138,8 @@ async function getDropdownData(req, res) {
       });
     }
 
-    // Materials - For production staff+ and VIEWER (read-only)
-    if ((!category || category === 'materials') && (req.user.roleLevel >= 50 || req.user.rol === 'VIEWER')) {
+    // Materials - Available for all logged users (basic info)
+    if (!category || category === 'materials') {
       results.materials = await prisma.material.findMany({
         where: activeWhere,
         select: {
@@ -163,8 +163,8 @@ async function getDropdownData(req, res) {
       });
     }
 
-    // Customers - Role-based PII protection, VIEWER can see basic info
-    if ((!category || category === 'cariler') && (req.user.roleLevel >= 50 || req.user.rol === 'VIEWER')) {
+    // Customers - Available for all logged users (basic info)
+    if (!category || category === 'cariler') {
       results.cariler = await prisma.cariMusteri.findMany({
         where: activeWhere,
         select: {
@@ -190,25 +190,10 @@ async function getDropdownData(req, res) {
       });
     }
 
-    // Categories - Available for all users
-    if (!category || category === 'kategoriler') {
-      results.kategoriler = await prisma.urunKategori.findMany({
-        where: activeWhere,
-        select: {
-          id: true,
-          ad: true,
-          kod: true,
-          aktif: true,
-          ...(format === 'detailed' && {
-            aciklama: true
-          })
-        },
-        orderBy: { ad: 'asc' }
-      });
-    }
+    // Categories - REMOVED (not in original system)
 
-    // Payment methods - Financial data for supervisors+
-    if ((!category || category === 'odeme_yontemleri') && req.user.roleLevel >= 60) {
+    // Payment methods - Available for all logged users
+    if (!category || category === 'odeme_yontemleri') {
       results.odemeYontemleri = [
         { kod: 'NAKIT', ad: 'Nakit', aktif: true },
         { kod: 'KART', ad: 'Kredi/Banka Kartı', aktif: true },
