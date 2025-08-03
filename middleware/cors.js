@@ -21,33 +21,24 @@ const getCorsConfig = () => {
             process.env.FRONTEND_URL
         ].filter(Boolean);
 
+    // --- GÜNCELLEME ---
+    const allowedHeaders = [
+        'Content-Type',
+        'Authorization',
+        'X-Requested-With',
+        'cache-control',
+        'x-security-level',
+        'x-request-timestamp',
+        'x-device-fingerprint',
+        'X-CSRF-Token'
+    ];
+
     return {
         origins: allowedOrigins,
         credentials: true,
         maxAge: 86400, // 24 hours
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
-        allowedHeaders: [
-            'Content-Type',
-            'Authorization',
-            'X-Requested-With',
-            'Accept',
-            'Accept-Language',
-            'Cache-Control',
-            'Pragma',
-            'If-Modified-Since',
-            'X-Security-Level',
-            'X-Request-Timestamp',
-            'X-Device-Fingerprint',
-            'X-Client-Id',
-            'X-API-Key',
-            'X-CSRF-Token',
-            'X-Real-IP',
-            'X-Forwarded-For',
-            'X-Forwarded-Proto',
-            'User-Agent',
-            'Referer',
-            'Origin'
-        ],
+        allowedHeaders: allowedHeaders,
         exposedHeaders: [
             'X-Total-Count',
             'X-Page-Count',
