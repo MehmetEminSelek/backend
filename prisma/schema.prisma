@@ -577,6 +577,10 @@ model Siparis {
   karOrani                Float?    @default(0) // Kar oranı %
   maliyetGuncellemeTarihi DateTime? // Maliyet hesaplama tarihi
 
+  // İNDİRİM ALANLARI - NULLABLE (API UYUMLULUĞU)
+  indirimTutari Float? @default(0) // İndirim tutarı
+  indirimSebebi String? // İndirim sebebi açıklaması
+
   // Status
   durum       SiparisDurumu @default(ONAY_BEKLEYEN)
   kargoDurumu KargoDurumu   @default(ADRESE_TESLIMAT)
