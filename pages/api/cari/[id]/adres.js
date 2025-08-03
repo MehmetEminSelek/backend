@@ -13,9 +13,9 @@ async function handler(req, res) {
     // Validate and parse ID
     const parsedId = parseInt(cariMusteriId);
     if (!parsedId || isNaN(parsedId)) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             error: 'Invalid cari ID',
-            received: cariMusteriId 
+            received: cariMusteriId
         });
     }
 
