@@ -292,7 +292,7 @@ async function updateOrder(req, res, orderId) {
     }
 
     // Permission checks for different update types
-            const isOwner = currentOrder.createdBy === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyStatus = req.user.roleLevel >= 60; // Supervisors+
     const canModifyFinancial = req.user.roleLevel >= 70; // Managers+
     const canModifyItems = req.user.roleLevel >= 60 || isOwner;
@@ -525,7 +525,7 @@ async function deleteOrder(req, res, orderId) {
     }
 
     // Permission checks
-            const isOwner = orderToDelete.createdBy === req.user.userId;
+    const isOwner = orderToDelete.createdBy === req.user.userId;
     const canDeleteAny = req.user.roleLevel >= 80; // Admin+
 
     if (!isOwner && !canDeleteAny) {

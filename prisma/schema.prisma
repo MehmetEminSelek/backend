@@ -396,7 +396,6 @@ model Cari {
   aktif Boolean @default(true)
 
   // Relations
-  siparisler Siparis[]
   hareketler CariHareket[]
   odemeler   CariOdeme[]
   adresler   CariAdres[] // YENİ: Çoklu adres desteği
@@ -489,8 +488,9 @@ model CariMusteri {
   cariId      Int?    // Ana Cari kaydı ile eşleştirme için
   cari        Cari?   @relation(fields: [cariId], references: [id])
   
-  // Adres relation
+  // Relations
   adresler    CariAdres[]
+  siparisler  Siparis[] // Orders by this customer
   
   // Audit
   createdAt   DateTime @default(now())
@@ -542,7 +542,7 @@ model Siparis {
 
   // Customer Info  
   cariId Int?
-  cari   Cari? @relation(fields: [cariId], references: [id])
+  cari   CariMusteri? @relation(fields: [cariId], references: [id])
 
   // Manual Customer (CSV'den Gönderen/Alıcı)
   gonderenAdi   String
