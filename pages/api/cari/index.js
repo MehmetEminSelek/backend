@@ -1,18 +1,11 @@
 /**
- * =============================================
- * SECURED CUSTOMERS API - FULL SECURITY INTEGRATION
- * =============================================
+ * CariMusteri API - Schema Aligned
  */
 
-// Removed non-existent security imports
-import { createAuditLog } from '../../../lib/audit-logger.js';
 import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
 import prisma from '../../../lib/prisma.js';
 
-/**
- * Customers API Handler with Full Security Integration
- */
-async function customersHandler(req, res) {
+async function cariHandler(req, res) {
     const { method } = req;
 
     try {
@@ -29,316 +22,151 @@ async function customersHandler(req, res) {
                 });
         }
     } catch (error) {
-        console.error('Customers API Error:', error);
-
-        console.error('CUSTOMERS_API_ERROR:', error.message);
-
+        console.error('Cari API Error:', error);
         return res.status(500).json({
-            error: 'Customer operation failed',
-            code: 'CUSTOMERS_ERROR'
+            error: 'Internal server error',
+            code: 'CARI_ERROR'
         });
     }
 }
 
 /**
- * Get Customers List with Advanced Filtering
+ * Get Customers List
  */
 async function getCustomers(req, res) {
     const {
         page = 1,
         limit = 50,
         search,
-        tipi,
-        il,
-        subeId,
-        aktif,
-        sortBy = 'ad',
-        sortOrder = 'asc'
+        aktif
     } = req.query;
 
-    // Basic input validation
+    // Basic pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
-    // Build secure where clause
+    // Build where clause
     const whereClause = {};
-
-    // Type filtering
-    if (tipi) {
-        const validTypes = ['MUSTERI', 'TEDARIKCI', 'PERSONEL', 'DIGER'];
-        if (validTypes.includes(tipi.toUpperCase())) {
-            whereClause.tipi = tipi.toUpperCase();
-        }
-    }
-
-    // City filtering
-    if (il) {
-        whereClause.il = { contains: il, mode: 'insensitive' };
-    }
-
-    // Branch filtering
-    if (subeId) {
-        whereClause.subeId = parseInt(subeId);
-    }
 
     // Active status filtering
     if (aktif !== undefined) {
         whereClause.aktif = aktif === 'true';
     }
 
-    // Search filtering
+    // Search filtering using correct CariMusteri fields
     if (search) {
         whereClause.OR = [
-            { ad: { contains: search, mode: 'insensitive' } },
-            { soyad: { contains: search, mode: 'insensitive' } },
-            { unvan: { contains: search, mode: 'insensitive' } },
+            { cariAdi: { contains: search, mode: 'insensitive' } },
+            { irtibatAdi: { contains: search, mode: 'insensitive' } },
+            { subeAdi: { contains: search, mode: 'insensitive' } },
             { telefon: { contains: search } },
-            { email: { contains: search, mode: 'insensitive' } },
             { musteriKodu: { contains: search, mode: 'insensitive' } }
         ];
     }
 
-    // Use already calculated pagination values
-    const skip = (pageNum - 1) * limitNum;
-
-    // Sorting validation
-    const validSortFields = ['ad', 'soyad', 'musteriKodu', 'tipi', 'olusturmaTarihi'];
-    const validSortOrders = ['asc', 'desc'];
-    const sortField = validSortFields.includes(sortBy) ? sortBy : 'ad';
-    const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'asc';
-
-    // Direct query using prisma
+    // Execute query
     const [customers, totalCount] = await Promise.all([
         prisma.cariMusteri.findMany({
             where: whereClause,
             select: {
                 id: true,
-                ad: true,
-                soyad: true,
-                unvan: true,
-                telefon: true,
-                email: true,
+                cariAdi: true,
                 musteriKodu: true,
-                tipi: true,
+                telefon: true,
                 aktif: true,
-                olusturmaTarihi: true,
-
-                // Sensitive data only for higher roles
-                ...(req.user.roleLevel >= 60 && {
-                    adres: true,
-                    il: true,
-                    ilce: true,
-                    postaKodu: true,
-                    vergiDairesi: true,
-                    vergiNo: true
-                }),
-
-                sube: {
-                    select: {
-                        id: true,
-                        ad: true,
-                        kod: true
-                    }
-                }
+                createdAt: true,
+                subeAdi: true,
+                irtibatAdi: true,
+                cariGrubu: true,
+                fiyatGrubu: true
             },
-            orderBy: {
-                [sortField]: sortDirection
-            },
+            orderBy: { cariAdi: 'asc' },
             skip,
             take: limitNum
         }),
-        prisma.cariMusteri.count({
-            where: whereClause
-        })
+        prisma.cariMusteri.count({ where: whereClause })
     ]);
 
-    // Calculate summary statistics
-    const customersSummary = await prisma.cariMusteri.groupBy({
-        by: ['tipi'],
-        where: whereClause,
-        _count: {
-            id: true
-        }
-    });
-
-    console.log('CUSTOMERS_VIEW: Customers list accessed by', req.user?.personelId, {
+    console.log('CUSTOMERS_VIEW: Accessed by', req.user?.personelId, {
         totalCustomers: totalCount,
         page: pageNum,
-        limit: limitNum,
-        filters: { search, tipi, il, subeId, aktif }
+        limit: limitNum
     });
 
     return res.status(200).json({
         success: true,
         customers,
         pagination: {
-            currentPage: pageNum,
-            totalPages: Math.ceil(totalCount / limitNum),
-            totalItems: totalCount,
-            itemsPerPage: limitNum
-        },
-        summary: customersSummary.reduce((acc, item) => {
-            acc[item.tipi] = item._count.id;
-            return acc;
-        }, {})
+            page: pageNum,
+            limit: limitNum,
+            total: totalCount,
+            pages: Math.ceil(totalCount / limitNum)
+        }
     });
 }
 
 /**
- * Create New Customer with Enhanced Security and Validation
+ * Create New Customer
  */
 async function createCustomer(req, res) {
-    // Input validation with security checks
-    const validationResult = validateInput(req.body, {
-        requiredFields: ['ad', 'telefon'],
-        allowedFields: [
-            'ad', 'soyad', 'unvan', 'telefon', 'email', 'adres', 'il', 'ilce',
-            'postaKodu', 'musteriKodu', 'tipi', 'vergiDairesi', 'vergiNo',
-            'subeId', 'notlar', 'aktif'
-        ],
-        requireSanitization: true
-    });
-
-    if (!validationResult.isValid) {
-        return res.status(400).json({
-            error: 'Invalid customer data',
-            details: validationResult.errors
-        });
-    }
-
     const {
-        ad, soyad, unvan, telefon, email, adres, il, ilce, postaKodu,
-        musteriKodu, tipi = 'MUSTERI', vergiDairesi, vergiNo,
-        subeId, notlar, aktif = true
+        cariAdi, telefon, musteriKodu, subeAdi, irtibatAdi, 
+        cariGrubu, fiyatGrubu, aktif = true
     } = req.body;
 
-    // Business logic validation
-    const phoneRegex = /^(\+90|0)?[5][0-9]{9}$/;
-    if (!phoneRegex.test(telefon.replace(/\s/g, ''))) {
+    // Validation
+    if (!cariAdi || !telefon) {
         return res.status(400).json({
-            error: 'Invalid phone number format'
+            error: 'cariAdi and telefon are required fields'
         });
     }
 
-    // Email validation if provided
-    if (email) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                error: 'Invalid email format'
-            });
+    // Check for existing customer
+    const existingCustomer = await prisma.cariMusteri.findFirst({
+        where: {
+            OR: [
+                { telefon },
+                ...(musteriKodu ? [{ musteriKodu }] : [])
+            ]
         }
-    }
-
-    // Type validation
-    const validTypes = ['MUSTERI', 'TEDARIKCI', 'PERSONEL', 'DIGER'];
-    if (!validTypes.includes(tipi.toUpperCase())) {
-        return res.status(400).json({
-            error: 'Invalid customer type'
-        });
-    }
-
-    // Enhanced transaction for customer creation
-    const result = await prisma.$transaction(async (tx) => {
-        // Check for existing customers by phone or email
-        const existingCustomer = await tx.cariMusteri.findFirst({
-            where: {
-                OR: [
-                    { telefon },
-                    ...(email ? [{ email }] : []),
-                    ...(musteriKodu ? [{ musteriKodu }] : [])
-                ]
-            }
-        });
-
-        if (existingCustomer) {
-            let field = 'telefon';
-            if (existingCustomer.email === email) field = 'email';
-            if (existingCustomer.musteriKodu === musteriKodu) field = 'musteriKodu';
-
-            throw new Error(`Customer with this ${field} already exists`);
-        }
-
-        // Generate customer code if not provided
-        const finalCustomerCode = musteriKodu || `MUS-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
-
-        // Create customer with audit trail
-        const newCustomer = await tx.cariMusteri.create({
-            data: {
-                ad,
-                soyad: soyad || '',
-                unvan: unvan || '',
-                telefon,
-                email: email || '',
-                adres: adres || '',
-                il: il || '',
-                ilce: ilce || '',
-                postaKodu: postaKodu || '',
-                musteriKodu: finalCustomerCode,
-                tipi: tipi.toUpperCase(),
-                vergiDairesi: vergiDairesi || '',
-                vergiNo: vergiNo || '',
-                subeId: subeId ? parseInt(subeId) : null,
-                notlar: notlar || '',
-                aktif,
-                olusturmaTarihi: new Date(),
-                olusturanKullanici: req.user.userId
-            },
-            select: {
-                id: true,
-                ad: true,
-                soyad: true,
-                unvan: true,
-                telefon: true,
-                email: true,
-                musteriKodu: true,
-                tipi: true,
-                aktif: true,
-                olusturmaTarihi: true
-            }
-        }, 'CUSTOMER_CREATED');
-
-        return newCustomer;
     });
 
-    // Enhanced audit logging
-    auditLog('CUSTOMER_CREATED', 'New customer created', {
-        userId: req.user.userId,
-        customerId: result.id,
-        customerCode: result.musteriKodu,
-        customerName: `${result.ad} ${result.soyad}`.trim(),
-        customerType: result.tipi,
-        customerPhone: telefon
+    if (existingCustomer) {
+        const field = existingCustomer.telefon === telefon ? 'telefon' : 'musteriKodu';
+        return res.status(409).json({
+            error: `Customer with this ${field} already exists`
+        });
+    }
+
+    // Generate customer code if not provided
+    const finalCustomerCode = musteriKodu || `MUS-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+
+    // Create customer
+    const newCustomer = await prisma.cariMusteri.create({
+        data: {
+            cariAdi,
+            musteriKodu: finalCustomerCode,
+            telefon,
+            subeAdi: subeAdi || '',
+            irtibatAdi: irtibatAdi || '',
+            cariGrubu: cariGrubu || '',
+            fiyatGrubu: fiyatGrubu || '',
+            aktif
+        }
     });
 
-    // ✅ AUDIT LOG: Customer created
-    try {
-        await auditLog({
-            personelId: req.user?.personelId || req.user?.id,
-            action: 'CARI_OLUSTURULDU',
-            tableName: 'CARI',
-            recordId: result.id,
-            oldValues: null,
-            newValues: {
-                musteriKodu: result.musteriKodu,
-                ad: result.ad,
-                soyad: result.soyad,
-                telefon: result.telefon,
-                tipi: result.tipi
-            },
-            description: `Yeni cari oluşturuldu: ${result.musteriKodu} - ${result.ad} ${result.soyad || ''}`.trim(),
-            req
-        });
-    } catch (auditError) {
-        console.error('❌ Customer creation audit log failed:', auditError);
-    }
+    console.log('CUSTOMER_CREATED: Created by', req.user?.personelId, {
+        customerId: newCustomer.id,
+        customerCode: newCustomer.musteriKodu,
+        customerName: newCustomer.cariAdi
+    });
 
     return res.status(201).json({
         success: true,
         message: 'Customer created successfully',
-        customer: result
+        customer: newCustomer
     });
 }
 
-// ===== EXPORT WITH AUTH =====
-export default withCorsAndAuth(customersHandler); 
+export default withCorsAndAuth(cariHandler);
