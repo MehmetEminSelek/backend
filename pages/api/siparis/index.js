@@ -295,6 +295,14 @@ async function createOrder(req, res) {
         });
     }
 
+    // Debug: Log the payload for enum validation
+    console.log('📋 Order creation payload check:', {
+        gonderenAdi,
+        gonderenTel,
+        kalemlerCount: kalemler.length,
+        durum: 'ONAY_BEKLEYEN' // Will use this enum value
+    });
+
     // Validate phone number format (Turkish format)
     const phoneRegex = /^(\+90|0)?[5][0-9]{9}$/;
     if (!phoneRegex.test(gonderenTel.replace(/\s/g, ''))) {
@@ -446,7 +454,7 @@ async function createOrder(req, res) {
                 siparisNotu: siparisNotu || aciklama || '',
                 ozelTalepler: ozelTalepler || '',
                 subeId: subeId ? parseInt(subeId) : null,
-                durum: 'beklemede',
+                durum: 'ONAY_BEKLEYEN',
                 odemeDurumu: 'bekliyor',
                 toplamTutar: finalTotal,
                 toplamMaliyet,
