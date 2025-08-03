@@ -4,11 +4,10 @@
  * =============================================
  */
 
-import { secureAPI } from '../../../lib/api-security.js';
-import { withPrismaSecurity } from '../../../lib/prisma-security.js';
-import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
-import { auditLog } from '../../../lib/audit-logger.js';
-import { validateInput } from '../../../lib/validation.js';
+// Removed non-existent security imports
+import { createAuditLog } from '../../../lib/audit-logger.js';
+import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
+import prisma from '../../../lib/prisma.js';
 
 /**
  * Customers API Handler with Full Security Integration
@@ -32,11 +31,7 @@ async function customersHandler(req, res) {
     } catch (error) {
         console.error('Customers API Error:', error);
 
-        auditLog('CUSTOMERS_API_ERROR', 'Customers API operation failed', {
-            userId: req.user?.userId,
-            method,
-            error: error.message
-        });
+        console.error('CUSTOMERS_API_ERROR:', error.message);
 
         return res.status(500).json({
             error: 'Customer operation failed',
@@ -61,20 +56,9 @@ async function getCustomers(req, res) {
         sortOrder = 'asc'
     } = req.query;
 
-    // Input validation
-    const validationResult = validateInput(req.query, {
-        allowedFields: [
-            'page', 'limit', 'search', 'tipi', 'il', 'subeId', 'aktif', 'sortBy', 'sortOrder'
-        ],
-        requireSanitization: true
-    });
-
-    if (!validationResult.isValid) {
-        return res.status(400).json({
-            error: 'Invalid query parameters',
-            details: validationResult.errors
-        });
-    }
+    // Basic input validation
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
 
     // Build secure where clause
     const whereClause = {};
@@ -114,9 +98,7 @@ async function getCustomers(req, res) {
         ];
     }
 
-    // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
+    // Use already calculated pagination values
     const skip = (pageNum - 1) * limitNum;
 
     // Sorting validation
@@ -125,7 +107,7 @@ async function getCustomers(req, res) {
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'ad';
     const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'asc';
 
-    // Enhanced query with security context
+    // Direct query using prisma
     const [customers, totalCount] = await Promise.all([
         prisma.cariMusteri.findMany({
             where: whereClause,
@@ -179,8 +161,7 @@ async function getCustomers(req, res) {
         }
     });
 
-    auditLog('CUSTOMERS_VIEW', 'Customers list accessed', {
-        userId: req.user.userId,
+    console.log('CUSTOMERS_VIEW: Customers list accessed by', req.user?.personelId, {
         totalCustomers: totalCount,
         page: pageNum,
         limit: limitNum,
@@ -359,14 +340,5 @@ async function createCustomer(req, res) {
     });
 }
 
-// ===== SECURITY INTEGRATION =====
-import { requireAuth } from '../../../lib/simple-auth.js';
-// Prisma already imported above
-
-async function handler(req, res) {
-    // Simple auth zaten user'ı req'e ekledi
-    req.prisma = prisma;
-    return customersHandler(req, res);
-}
-
-export default requireAuth(handler); 
+// ===== EXPORT WITH AUTH =====
+export default withCorsAndAuth(customersHandler); 
