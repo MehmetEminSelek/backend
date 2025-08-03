@@ -190,7 +190,50 @@ async function getDropdownData(req, res) {
       });
     }
 
-    // Categories - REMOVED (not in original system)
+    // Tepsi/Tava - Available for all logged users
+    if (!category || category === 'tepsiTavalar') {
+      results.tepsiTavalar = await prisma.tepsiTava.findMany({
+        where: activeWhere,
+        select: {
+          id: true,
+          ad: true,
+          kod: true,
+          aciklama: true,
+          boyut: true,
+          agirlik: true,
+          malzeme: true,
+          aktif: true
+        },
+        orderBy: { ad: 'asc' }
+      });
+    }
+
+    // Kutular - Available for all logged users
+    if (!category || category === 'kutular') {
+      results.kutular = await prisma.kutu.findMany({
+        where: activeWhere,
+        select: {
+          id: true,
+          ad: true,
+          kod: true,
+          aciklama: true,
+          fiyat: true,
+          agirlik: true,
+          boyutlar: true,
+          aktif: true
+        },
+        orderBy: { ad: 'asc' }
+      });
+    }
+
+    // Alici Tipleri - Hardcoded seçenekler (sistem tasarımı gereği)
+    if (!category || category === 'aliciTipleri') {
+      results.aliciTipleri = [
+        { id: 1, kod: 'SADECE_GONDEREN', ad: 'Sadece Gönderen', aciklama: 'Tek kişi sipariş' },
+        { id: 2, kod: 'GONDEREN_ALICI', ad: 'Gönderen ve Alıcı', aciklama: 'Ayrı gönderen/alıcı' },
+        { id: 3, kod: 'KURUMSAL', ad: 'Kurumsal Sipariş', aciklama: 'Şirket siparişi' }
+      ];
+    }
 
     // Payment methods - Available for all logged users
     if (!category || category === 'odeme_yontemleri') {
