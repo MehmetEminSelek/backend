@@ -9,6 +9,8 @@ import { withPrismaSecurity } from '../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../lib/rbac-enhanced.js';
 import { auditLog } from '../../lib/audit-logger.js';
 import { validateInput } from '../../lib/validation.js';
+import prisma from '../../lib/prisma.js';
+// Note: Prisma enum values are matched by their string names below
 
 /**
  * Audit Logs API Handler with Full Security Integration
@@ -39,7 +41,8 @@ async function auditLogsHandler(req, res) {
 
         return res.status(500).json({
             error: 'Audit logs operation failed',
-            code: 'AUDIT_LOGS_ERROR'
+            code: 'AUDIT_LOGS_ERROR',
+            details: error.message
         });
     }
 }
@@ -61,24 +64,21 @@ async function getAuditLogs(req, res) {
         userId,
         action,
         tableName,
-        severity = 'all',
         ipAddress,
-        source = 'all',
         page = 1,
         limit = 50,
         sortBy = 'timestamp',
         sortOrder = 'desc',
         search,
-        includeDetails = false,
-        exportFormat
+        includeDetails = false
     } = req.query;
 
     // Input validation
     const validationResult = validateInput(req.query, {
         allowedFields: [
-            'startDate', 'endDate', 'userId', 'action', 'tableName', 'severity',
-            'ipAddress', 'source', 'page', 'limit', 'sortBy', 'sortOrder',
-            'search', 'includeDetails', 'exportFormat'
+            'startDate', 'endDate', 'userId', 'action', 'tableName',
+            'ipAddress', 'page', 'limit', 'sortBy', 'sortOrder',
+            'search', 'includeDetails'
         ],
         requireSanitization: true
     });
@@ -99,8 +99,17 @@ async function getAuditLogs(req, res) {
 
     console.log('GET /api/audit-logs request received...');
 
+    // Pagination and sorting (outer scope for later response use)
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(Math.max(1, parseInt(limit)), 200); // Max 200 per page
+    const skip = (pageNum - 1) * limitNum;
+    const validSortFields = ['timestamp', 'action', 'personelId', 'tableName', 'recordId'];
+    const validSortOrders = ['asc', 'desc'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'timestamp';
+    const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'desc';
+
     // Enhanced security transaction for audit log retrieval
-    const auditData = await req.prisma.secureTransaction(async (tx) => {
+    const auditData = await prisma.$transaction(async (tx) => {
         // Build comprehensive where clause
         const whereClause = {};
 
@@ -123,33 +132,25 @@ async function getAuditLogs(req, res) {
             lte: endDateObj
         };
 
-        // User filtering
+        // User filtering (maps to personelId in schema)
         if (userId) {
-            whereClause.userId = parseInt(userId);
+            whereClause.personelId = String(userId);
         }
 
-        // Action filtering
+        // Action filtering (enum-safe by name)
         if (action) {
-            whereClause.action = { contains: action, mode: 'insensitive' };
+            const normalized = String(action).toUpperCase();
+            const allowedActions = [
+                'CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'CANCEL', 'COMPLETE', 'TRANSFER', 'PAYMENT',
+                'LOGIN', 'LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGOUT', 'PASSWORD_CHANGE', 'PERMISSION_CHANGE',
+                'BULK_UPDATE', 'BULK_DELETE', 'IMPORT', 'EXPORT'
+            ];
+            if (allowedActions.includes(normalized)) whereClause.action = normalized;
         }
 
         // Table/Entity filtering
         if (tableName) {
-            whereClause.entityType = { contains: tableName, mode: 'insensitive' };
-        }
-
-        // Severity filtering
-        if (severity !== 'all') {
-            const severityLevels = {
-                'low': ['INFO', 'DEBUG'],
-                'medium': ['WARN'],
-                'high': ['ERROR', 'CRITICAL'],
-                'critical': ['CRITICAL']
-            };
-
-            if (severityLevels[severity]) {
-                whereClause.severity = { in: severityLevels[severity] };
-            }
+            whereClause.tableName = { contains: tableName, mode: 'insensitive' };
         }
 
         // IP address filtering
@@ -157,52 +158,35 @@ async function getAuditLogs(req, res) {
             whereClause.ipAddress = { contains: ipAddress };
         }
 
-        // Source filtering (API, UI, SYSTEM, etc.)
-        if (source !== 'all') {
-            whereClause.source = source.toUpperCase();
-        }
-
         // Search filtering across multiple fields
         if (search) {
             whereClause.OR = [
-                { action: { contains: search, mode: 'insensitive' } },
-                { entityType: { contains: search, mode: 'insensitive' } },
+                { tableName: { contains: search, mode: 'insensitive' } },
                 { description: { contains: search, mode: 'insensitive' } },
-                { userAgent: { contains: search, mode: 'insensitive' } }
+                { ipAddress: { contains: search, mode: 'insensitive' } }
             ];
         }
 
-        // Pagination and sorting
-        const pageNum = Math.max(1, parseInt(page));
-        const limitNum = Math.min(Math.max(1, parseInt(limit)), 200); // Max 200 per page
-        const skip = (pageNum - 1) * limitNum;
-
-        const validSortFields = ['timestamp', 'action', 'userId', 'severity', 'entityType'];
-        const validSortOrders = ['asc', 'desc'];
-        const sortField = validSortFields.includes(sortBy) ? sortBy : 'timestamp';
-        const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'desc';
-
         // Get audit logs with security filtering
         const [auditLogs, totalCount] = await Promise.all([
-            tx.secureQuery('auditLog', 'findMany', {
+            tx.auditLog.findMany({
                 where: whereClause,
                 select: {
                     id: true,
                     timestamp: true,
                     action: true,
-                    entityType: true,
-                    entityId: true,
-                    userId: true,
+                    tableName: true,
+                    recordId: true,
+                    personelId: true,
                     description: true,
-                    severity: true,
                     ipAddress: true,
-                    source: true,
 
                     // User information (basic)
-                    kullanici: {
+                    personel: {
                         select: {
                             id: true,
-                            adiSoyadi: true,
+                            ad: true,
+                            soyad: true,
                             rol: true
                         }
                     },
@@ -223,13 +207,13 @@ async function getAuditLogs(req, res) {
                 skip,
                 take: limitNum
             }),
-            tx.secureQuery('auditLog', 'count', {
+            tx.auditLog.count({
                 where: whereClause
             })
         ]);
 
         // Calculate audit statistics
-        const auditStats = await tx.secureQuery('auditLog', 'groupBy', {
+        const auditStats = await tx.auditLog.groupBy({
             by: ['action'],
             where: {
                 ...whereClause,
@@ -250,15 +234,13 @@ async function getAuditLogs(req, res) {
         });
 
         // Security events summary
-        const securityEvents = await tx.secureQuery('auditLog', 'count', {
+        const securityEvents = await tx.auditLog.count({
             where: {
                 ...whereClause,
                 OR: [
-                    { action: { contains: 'LOGIN_FAILED' } },
-                    { action: { contains: 'UNAUTHORIZED' } },
-                    { action: { contains: 'PERMISSION_DENIED' } },
-                    { action: { contains: 'SECURITY_VIOLATION' } },
-                    { severity: 'CRITICAL' }
+                    { action: { equals: 'LOGIN_FAILED' } },
+                    { action: { equals: 'PERMISSION_CHANGE' } },
+                    { action: { equals: 'EXPORT' } }
                 ]
             }
         });
@@ -290,7 +272,7 @@ async function getAuditLogs(req, res) {
             end: auditData.statistics.dateRange.end
         },
         totalEntries: auditData.statistics.totalEntries,
-        filters: { userId, action, tableName, severity, search },
+        filters: { userId, action, tableName, search },
         includeDetails: includeDetails === 'true',
         sensitiveOperation: true,
         auditAccess: true
@@ -422,9 +404,9 @@ async function purgeOldAuditLogs(req, res) {
     purgeDate.setDate(purgeDate.getDate() - parseInt(retentionDays));
 
     // Enhanced security transaction for purge operation
-    const purgeResult = await req.prisma.secureTransaction(async (tx) => {
+    const purgeResult = await prisma.$transaction(async (tx) => {
         // Count records to be purged
-        const recordsToDelete = await tx.secureQuery('auditLog', 'count', {
+        const recordsToDelete = await tx.auditLog.count({
             where: {
                 timestamp: {
                     lt: purgeDate
@@ -436,7 +418,7 @@ async function purgeOldAuditLogs(req, res) {
 
         // Perform actual deletion if not dry run and confirmed
         if (!dryRun && confirmPurge) {
-            const deleteResult = await tx.secureQuery('auditLog', 'deleteMany', {
+            const deleteResult = await tx.auditLog.deleteMany({
                 where: {
                     timestamp: {
                         lt: purgeDate

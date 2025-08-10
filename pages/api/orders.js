@@ -1,15 +1,10 @@
 // pages/api/orders.js
 import prisma from '../../lib/prisma.js';
+import { withCorsAndAuth } from '../../lib/cors-wrapper.js';
 import { Prisma } from '@prisma/client';
 import { recalculateOrderItemPrices } from '../../lib/fiyat'; // Yeni fiyatlandırma sistemi
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+export default withCorsAndAuth(async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
@@ -55,7 +50,7 @@ export default async function handler(req, res) {
         include: {
           teslimatTuru: { select: { ad: true } },
           sube: { select: { ad: true } },
-          cari: { select: { id: true, ad: true, musteriKodu: true } },
+          cari: { select: { id: true, cariAdi: true, musteriKodu: true, telefon: true } },
           odemeler: {
             orderBy: { odemeTarihi: 'desc' },
             select: {
@@ -101,7 +96,7 @@ export default async function handler(req, res) {
       );
 
       console.log(`${duzeltilmisSiparisler.length} adet sipariş bulundu.`);
-      return res.status(200).json(duzeltilmisSiparisler);
+      return res.status(200).json({ success: true, orders: duzeltilmisSiparisler });
 
     } catch (error) {
       console.error('❌ GET /api/orders HATA:', error);
@@ -112,4 +107,4 @@ export default async function handler(req, res) {
   console.log(`Desteklenmeyen metot: ${req.method} for /api/orders`);
   res.setHeader('Allow', ['GET', 'OPTIONS']);
   return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
-}
+});

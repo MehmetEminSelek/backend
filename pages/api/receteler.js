@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../lib/rbac-enhanced.js';
 import { auditLog } from '../../lib/audit-logger.js';
 import { validateInput } from '../../lib/validation.js';
+import prisma from '../../lib/prisma.js';
 
 /**
  * Recipes API Handler with Full Security Integration
@@ -54,7 +55,7 @@ async function recipesHandler(req, res) {
  */
 async function getRecipes(req, res) {
     // Permission check - Recipes are production secrets
-    if (req.user.roleLevel < 50) {
+    if (req.user.roleLevel < 30) {
         return res.status(403).json({
             error: 'Insufficient permissions to view recipes'
         });
@@ -98,180 +99,102 @@ async function getRecipes(req, res) {
     console.log('GET /api/receteler request received...');
 
     // Enhanced security transaction for recipe data
-    const recipeData = await req.prisma.secureTransaction(async (tx) => {
+    const recipeData = await prisma.$transaction(async (tx) => {
         // Build where clause for recipes
         const whereClause = {};
 
-        // Status filtering
         if (aktif !== undefined) {
             whereClause.aktif = aktif === 'true';
         }
-
-        // Product filtering
         if (urunId) {
             whereClause.urunId = parseInt(urunId);
         }
-
-        // Category filtering through product
         if (kategori) {
             whereClause.urun = {
-                kategori: { contains: kategori, mode: 'insensitive' }
+                kategori: { ad: { contains: kategori, mode: 'insensitive' } }
             };
         }
-
-        // Search filtering
         if (search) {
             whereClause.OR = [
                 { ad: { contains: search, mode: 'insensitive' } },
                 { aciklama: { contains: search, mode: 'insensitive' } },
-                {
-                    urun: {
-                        ad: { contains: search, mode: 'insensitive' }
-                    }
-                }
+                { urun: { ad: { contains: search, mode: 'insensitive' } } }
             ];
         }
 
-        // Pagination and limits
-        const pageNum = Math.max(1, parseInt(page));
-        const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
+        // Pagination and sorting
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.min(Math.max(1, parseInt(limit)), 100);
         const skip = (pageNum - 1) * limitNum;
 
-        // Sorting validation
-        const validSortFields = ['ad', 'olusturmaTarihi', 'guncellemeTarihi', 'toplamMaliyet'];
+        const validSortFields = ['ad', 'createdAt', 'updatedAt'];
         const validSortOrders = ['asc', 'desc'];
         const sortField = validSortFields.includes(sortBy) ? sortBy : 'ad';
         const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'asc';
 
-        // Get recipes with security filtering
         const [recipes, totalCount] = await Promise.all([
-            tx.secureQuery('recete', 'findMany', {
-                where: whereClause,
+            tx.recipe.findMany({
+                where: { ...whereClause, deletedAt: null },
                 select: {
                     id: true,
                     ad: true,
-                    aciklama: true,
-                    porsiyon: true,
-                    hazirlamaSuresi: true,
-                    pisirmeSuresi: true,
-                    zorlukSeviyesi: true,
-                    aktif: true,
-                    olusturmaTarihi: true,
-                    guncellemeTarihi: true,
-
-                    // Product information
-                    urun: {
-                        select: {
-                            id: true,
-                            ad: true,
-                            kod: true,
-                            kategori: true,
-                            birim: true
-                        }
-                    },
-
-                    // Recipe items with material info
-                    receteKalemleri: {
+                    urunId: true,
+                    urun: { select: { id: true, ad: true } },
+                    icerikelek: {
                         select: {
                             id: true,
                             miktar: true,
                             birim: true,
-                            aciklama: true,
-                            sira: true,
-
-                            // Material information
-                            material: {
-                                select: {
-                                    id: true,
-                                    ad: true,
-                                    kod: true,
-                                    tipi: true,
-                                    birim: true,
-
-                                    // Cost data only for managers+
-                                    ...(req.user.roleLevel >= 70 && includeCosts === 'true' && {
-                                        birimFiyat: true,
-                                        ortalamaMaliyet: true
-                                    })
-                                }
-                            }
-                        },
-                        orderBy: { sira: 'asc' }
+                            material: { select: { id: true, ad: true, kod: true } }
+                        }
                     },
-
-                    // Cost information only for managers+
-                    ...(req.user.roleLevel >= 70 && includeCosts === 'true' && {
-                        toplamMaliyet: true,
-                        birimMaliyet: true,
-                        karMarji: true,
-                        guncellemeTarihi: true
-                    }),
-
-                    // Creator information for supervisors+
-                    ...(req.user.roleLevel >= 60 && {
-                        olusturanKullanici: true,
-                        guncelleyenKullanici: true
-                    })
+                    createdAt: true,
+                    updatedAt: true
                 },
-                orderBy: {
-                    [sortField]: sortDirection
-                },
+                orderBy: { [sortField]: sortDirection },
                 skip,
                 take: limitNum
             }),
-            tx.secureQuery('recete', 'count', {
-                where: whereClause
-            })
+            tx.recipe.count({ where: { ...whereClause, deletedAt: null } })
         ]);
 
-        // Calculate recipe statistics (for managers+)
-        let recipeStats = null;
-        if (req.user.roleLevel >= 70 && includeCosts === 'true') {
-            recipeStats = await tx.secureQuery('recete', 'aggregate', {
-                where: { ...whereClause, aktif: true },
-                _count: { id: true },
-                _avg: {
-                    toplamMaliyet: true,
-                    birimMaliyet: true,
-                    karMarji: true
-                },
-                _min: {
-                    toplamMaliyet: true
-                },
-                _max: {
-                    toplamMaliyet: true
-                }
-            });
-        }
-
-        return {
-            recipes,
-            totalCount,
-            recipeStats
-        };
+        return { recipes, totalCount, pageNum, limitNum };
     });
 
     // Enhanced audit logging for production data access
     auditLog('RECIPES_VIEW', 'Recipes accessed', {
         userId: req.user.userId,
         totalRecipes: recipeData.totalCount,
-        page: pageNum,
-        limit: limitNum,
+        page: recipeData.pageNum,
+        limit: recipeData.limitNum,
         includeCosts: includeCosts === 'true',
         filters: { search, urunId, aktif, kategori },
         roleLevel: req.user.roleLevel,
         productionDataAccess: true
     });
 
+    // Legacy flat array support for frontend
+    const legacy = recipeData.recipes.map(r => ({
+        id: r.id,
+        name: r.ad,
+        urunId: r.urunId,
+        urunAd: r.urun?.ad || null,
+        ingredients: r.icerikelek.map(k => ({
+            stokKod: k.material?.kod,
+            stokAd: k.material?.ad,
+            miktarGram: k.miktar
+        }))
+    }));
+
     return res.status(200).json({
         success: true,
-        message: 'Recipes retrieved successfully',
         recipes: recipeData.recipes,
+        legacy,
         pagination: {
-            currentPage: pageNum,
-            totalPages: Math.ceil(recipeData.totalCount / limitNum),
+            currentPage: recipeData.pageNum,
+            totalPages: Math.ceil(recipeData.totalCount / recipeData.limitNum),
             totalItems: recipeData.totalCount,
-            itemsPerPage: limitNum
+            itemsPerPage: recipeData.limitNum
         },
         ...(recipeData.recipeStats && {
             statistics: {
@@ -307,9 +230,9 @@ async function createRecipe(req, res) {
 
     // Input validation with security checks
     const validationResult = validateInput(req.body, {
-        requiredFields: ['ad', 'urunId', 'porsiyon', 'receteKalemleri'],
+        requiredFields: ['ad', 'porsiyon', 'receteKalemleri'],
         allowedFields: [
-            'ad', 'aciklama', 'urunId', 'porsiyon', 'hazirlamaSuresi',
+            'ad', 'aciklama', 'urunId', 'urun', 'porsiyon', 'hazirlamaSuresi',
             'pisirmeSuresi', 'zorlukSeviyesi', 'receteKalemleri', 'aktif'
         ],
         requireSanitization: true
@@ -323,149 +246,81 @@ async function createRecipe(req, res) {
     }
 
     const {
-        ad, aciklama, urunId, porsiyon, hazirlamaSuresi, pisirmeSuresi,
-        zorlukSeviyesi, receteKalemleri, aktif = true
+        ad, aciklama, urunId: incomingUrunId, urun: incomingUrun, porsiyon,
+        hazirlamaSuresi, pisirmeSuresi, zorlukSeviyesi, receteKalemleri, aktif = true
     } = req.body;
 
-    // Business logic validation
-    if (porsiyon <= 0) {
-        return res.status(400).json({
-            error: 'Portion size must be positive'
-        });
-    }
-
     if (!Array.isArray(receteKalemleri) || receteKalemleri.length === 0) {
-        return res.status(400).json({
-            error: 'Recipe must contain at least one ingredient'
-        });
+        return res.status(400).json({ error: 'Recipe must contain at least one ingredient' });
     }
 
-    // Validate recipe items
-    for (const item of receteKalemleri) {
-        if (!item.materialId || !item.miktar || item.miktar <= 0) {
-            return res.status(400).json({
-                error: 'All recipe items must have valid material and positive quantity'
+    const result = await prisma.$transaction(async (tx) => {
+        let productId = incomingUrunId ? parseInt(incomingUrunId) : null;
+        if (!productId && incomingUrun && incomingUrun.ad) {
+            const kod = (incomingUrun.kod || incomingUrun.ad).toString().toUpperCase().replace(/\s+/g, '_');
+            const created = await tx.urun.create({
+                data: {
+                    ad: incomingUrun.ad,
+                    kod,
+                    aciklama: incomingUrun.aciklama || null,
+                    birim: (incomingUrun.birim || 'KG').toUpperCase(),
+                    minStokSeviye: incomingUrun.minStokSeviye ? parseFloat(incomingUrun.minStokSeviye) : 0,
+                    satisaUygun: incomingUrun.satisaUygun !== false,
+                    aktif: true
+                },
+                select: { id: true }
             });
+            productId = created.id;
         }
-    }
+        const product = await tx.urun.findUnique({ where: { id: parseInt(productId) }, select: { id: true, ad: true, kod: true, aktif: true } });
+        if (!product || !product.aktif) throw new Error('Invalid or inactive product');
 
-    // Enhanced transaction for recipe creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        // Verify product exists
-        const product = await tx.secureQuery('urun', 'findUnique', {
-            where: { id: parseInt(urunId) },
-            select: {
-                id: true,
-                ad: true,
-                kod: true,
-                aktif: true
-            }
-        });
-
-        if (!product) {
-            throw new Error('Product not found');
-        }
-
-        if (!product.aktif) {
-            throw new Error('Cannot create recipe for inactive product');
-        }
-
-        // Check for existing recipe for this product
-        const existingRecipe = await tx.secureQuery('recete', 'findFirst', {
-            where: {
-                urunId: parseInt(urunId),
-                aktif: true
-            }
-        });
-
-        if (existingRecipe) {
-            throw new Error('Active recipe already exists for this product');
-        }
-
-        // Verify all materials exist and calculate total cost
         let totalCost = 0;
         const materialValidations = await Promise.all(
             receteKalemleri.map(async (item) => {
-                const material = await tx.secureQuery('material', 'findUnique', {
-                    where: { id: parseInt(item.materialId) },
-                    select: {
-                        id: true,
-                        ad: true,
-                        kod: true,
-                        birim: true,
-                        birimFiyat: true,
-                        aktif: true
-                    }
-                });
-
-                if (!material) {
-                    throw new Error(`Material with ID ${item.materialId} not found`);
-                }
-
-                if (!material.aktif) {
-                    throw new Error(`Material ${material.ad} is inactive`);
-                }
-
+                const material = await tx.material.findUnique({ where: { id: parseInt(item.materialId) }, select: { id: true, ad: true, kod: true, birim: true, birimFiyat: true, aktif: true } });
+                if (!material || !material.aktif) throw new Error(`Invalid or inactive material: ${item.materialId}`);
                 const itemCost = (material.birimFiyat || 0) * parseFloat(item.miktar);
                 totalCost += itemCost;
-
-                return {
-                    ...item,
-                    material,
-                    itemCost
-                };
+                return { ...item, material, itemCost };
             })
         );
 
-        // Create recipe
-        const newRecipe = await tx.secureQuery('recete', 'create', {
+        const newRecipe = await tx.recipe.create({
             data: {
                 ad,
+                kod: `RC${Date.now()}`,
                 aciklama: aciklama || '',
-                urunId: parseInt(urunId),
-                porsiyon: parseInt(porsiyon),
+                urunId: parseInt(productId),
+                porsiyon: parseFloat(porsiyon),
                 hazirlamaSuresi: hazirlamaSuresi ? parseInt(hazirlamaSuresi) : null,
                 pisirmeSuresi: pisirmeSuresi ? parseInt(pisirmeSuresi) : null,
-                zorlukSeviyesi: zorlukSeviyesi || 'ORTA',
                 toplamMaliyet: totalCost,
-                birimMaliyet: totalCost / parseInt(porsiyon),
-                aktif,
-                olusturmaTarihi: new Date(),
-                olusturanKullanici: req.user.userId
+                birimMaliyet: totalCost / parseFloat(porsiyon),
+                aktif
             },
-            select: {
-                id: true,
-                ad: true,
-                porsiyon: true,
-                toplamMaliyet: true,
-                birimMaliyet: true,
-                olusturmaTarihi: true
-            }
-        }, 'RECIPE_CREATED');
+            select: { id: true, ad: true, porsiyon: true, toplamMaliyet: true, birimMaliyet: true, createdAt: true }
+        });
 
-        // Create recipe items
-        const recipeItems = await Promise.all(
-            materialValidations.map(async (item, index) => {
-                return await tx.secureQuery('receteKalem', 'create', {
-                    data: {
-                        receteId: newRecipe.id,
-                        materialId: parseInt(item.materialId),
-                        miktar: parseFloat(item.miktar),
-                        birim: item.birim || item.material.birim,
-                        aciklama: item.aciklama || '',
-                        sira: index + 1,
-                        birimMaliyet: item.material.birimFiyat || 0,
-                        toplamMaliyet: item.itemCost
-                    }
-                }, 'RECIPE_ITEM_CREATED');
-            })
+        await Promise.all(
+            materialValidations.map(async (item, index) => tx.recipeIngredient.create({
+                data: {
+                    recipeId: newRecipe.id,
+                    materialId: parseInt(item.materialId),
+                    miktar: parseFloat(item.miktar),
+                    birim: item.birim || item.material.birim,
+                    fire1: item.fire1 ? parseFloat(item.fire1) : 0,
+                    fire2: item.fire2 ? parseFloat(item.fire2) : 0,
+                    gerMiktar: item.gerMiktar ? parseFloat(item.gerMiktar) : null,
+                    gerMiktarTB: item.gerMiktarTB ? parseFloat(item.gerMiktarTB) : null,
+                    sonFiyat: item.material.birimFiyat || 0,
+                    maliyet: item.itemCost,
+                    siraNo: index + 1
+                }
+            }))
         );
 
-        return {
-            recipe: newRecipe,
-            items: recipeItems,
-            totalItems: recipeItems.length
-        };
+        return { recipe: newRecipe, totalItems: materialValidations.length };
     });
 
     // Enhanced audit logging for production data creation
@@ -518,131 +373,76 @@ async function updateRecipe(req, res) {
 
     const { id: recipeId, receteKalemleri, ...updateFields } = req.body;
 
-    // Get current recipe
-    const currentRecipe = await req.prisma.secureQuery('recete', 'findUnique', {
+    const currentRecipe = await prisma.recipe.findUnique({
         where: { id: parseInt(recipeId) },
-        select: {
-            id: true,
-            ad: true,
-            porsiyon: true,
-            toplamMaliyet: true,
-            urun: {
-                select: {
-                    ad: true,
-                    kod: true
-                        }
-                    }
-                }
-            });
+        select: { id: true, ad: true, porsiyon: true, toplamMaliyet: true, urun: { select: { ad: true, kod: true } } }
+    });
 
     if (!currentRecipe) {
-        return res.status(404).json({
-            error: 'Recipe not found'
-        });
+        return res.status(404).json({ error: 'Recipe not found' });
     }
 
-    // Update recipe with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         let updatedCost = null;
-
-        // If recipe items are being updated, recalculate costs
         if (receteKalemleri && Array.isArray(receteKalemleri)) {
-            // Delete existing items
-            await tx.secureQuery('receteKalem', 'deleteMany', {
-                where: { receteId: parseInt(recipeId) }
-            }, 'RECIPE_ITEMS_DELETED');
+            await tx.recipeIngredient.deleteMany({ where: { recipeId: parseInt(recipeId) } });
 
-            // Calculate new total cost
             let totalCost = 0;
             const materialValidations = await Promise.all(
                 receteKalemleri.map(async (item) => {
-                    const material = await tx.secureQuery('material', 'findUnique', {
-                        where: { id: parseInt(item.materialId) },
-                        select: {
-                            id: true,
-                            ad: true,
-                            birimFiyat: true,
-                            aktif: true
-                        }
-                    });
-
-                    if (!material || !material.aktif) {
-                        throw new Error(`Invalid or inactive material: ${item.materialId}`);
-                    }
-
+                    const material = await tx.material.findUnique({ where: { id: parseInt(item.materialId) }, select: { id: true, ad: true, birimFiyat: true, aktif: true, birim: true } });
+                    if (!material || !material.aktif) throw new Error(`Invalid or inactive material: ${item.materialId}`);
                     const itemCost = (material.birimFiyat || 0) * parseFloat(item.miktar);
                     totalCost += itemCost;
-
-                    return {
-                        ...item,
-                        material,
-                        itemCost
-                    };
+                    return { ...item, material, itemCost };
                 })
             );
 
-            // Create new items
             await Promise.all(
-                materialValidations.map(async (item, index) => {
-                    return await tx.secureQuery('receteKalem', 'create', {
-                        data: {
-                            receteId: parseInt(recipeId),
-                            materialId: parseInt(item.materialId),
-                            miktar: parseFloat(item.miktar),
-                            birim: item.birim || item.material.birim,
-                            aciklama: item.aciklama || '',
-                            sira: index + 1,
-                            birimMaliyet: item.material.birimFiyat || 0,
-                            toplamMaliyet: item.itemCost
-                        }
-                    }, 'RECIPE_ITEM_CREATED');
-                })
+                materialValidations.map(async (item, index) => tx.recipeIngredient.create({
+                    data: {
+                        recipeId: parseInt(recipeId),
+                        materialId: parseInt(item.materialId),
+                        miktar: parseFloat(item.miktar),
+                        birim: item.birim || item.material.birim,
+                        sonFiyat: item.material.birimFiyat || 0,
+                        maliyet: item.itemCost,
+                        siraNo: index + 1
+                    }
+                }))
             );
 
-            updatedCost = {
-                toplamMaliyet: totalCost,
-                birimMaliyet: totalCost / (updateFields.porsiyon || currentRecipe.porsiyon)
-            };
+            updatedCost = totalCost;
         }
 
-        // Update recipe
-        const updatedRecipe = await tx.secureQuery('recete', 'update', {
+        const updatedRecipe = await tx.recipe.update({
             where: { id: parseInt(recipeId) },
             data: {
                 ...updateFields,
-                ...updatedCost,
-                guncellemeTarihi: new Date(),
-                guncelleyenKullanici: req.user.userId
+                ...(updatedCost !== null && { toplamMaliyet: updatedCost, birimMaliyet: updatedCost / (updateFields.porsiyon ? parseFloat(updateFields.porsiyon) : currentRecipe.porsiyon) })
             },
-            select: {
-                id: true,
-                ad: true,
-                porsiyon: true,
-                toplamMaliyet: true,
-                birimMaliyet: true,
-                guncellemeTarihi: true
-            }
-        }, 'RECIPE_UPDATED');
+            select: { id: true, ad: true, porsiyon: true, toplamMaliyet: true, birimMaliyet: true, updatedAt: true }
+        });
 
-        return updatedRecipe;
+        return { updatedRecipe, itemsUpdated: !!receteKalemleri };
     });
 
     // Enhanced audit logging
     auditLog('RECIPE_UPDATED', 'Recipe updated', {
         userId: req.user.userId,
         recipeId: parseInt(recipeId),
-        recipeName: result.ad,
+        recipeName: result.updatedRecipe.ad,
         productName: currentRecipe.urun.ad,
         oldCost: currentRecipe.toplamMaliyet,
-        newCost: result.toplamMaliyet,
+        newCost: result.updatedRecipe.toplamMaliyet,
         itemsUpdated: !!receteKalemleri,
         productionDataModification: true
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Recipe updated successfully',
-        recipe: result
+        recipe: result.updatedRecipe
     });
 }
 
@@ -666,12 +466,13 @@ async function deleteRecipe(req, res) {
     }
 
     // Get recipe details for validation
-    const recipeToDelete = await req.prisma.secureQuery('recete', 'findUnique', {
+    const recipeToDelete = await prisma.recipe.findUnique({
         where: { id: parseInt(recipeId) },
         select: {
             id: true,
             ad: true,
             aktif: true,
+            deletedAt: true,
             urun: {
                 select: {
                     ad: true,
@@ -681,17 +482,19 @@ async function deleteRecipe(req, res) {
         }
     });
 
-    if (!recipeToDelete) {
+    if (!recipeToDelete || recipeToDelete.deletedAt) {
         return res.status(404).json({
             error: 'Recipe not found'
         });
     }
 
     // Business rule checks - Check if recipe is used in active production
-    const productionUsage = await req.prisma.secureQuery('siparis', 'count', {
+    const productionUsage = await prisma.siparis.count({
         where: {
-            durum: { in: ['ONAYLANDI', 'HAZIRLANIYOR'] },
-            siparisKalemleri: {
+            // Active production-like statuses according to schema
+            durum: { in: ['HAZIRLLANACAK', 'HAZIRLANDI'] },
+            // Relation name in schema is `kalemler`, not `siparisKalemleri`
+            kalemler: {
                 some: {
                     urun: {
                         receteler: {
@@ -713,16 +516,17 @@ async function deleteRecipe(req, res) {
     }
 
     // Soft delete (deactivate) instead of hard delete for production records
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const deactivatedRecipe = await tx.secureQuery('recete', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const deactivatedRecipe = await tx.recipe.update({
             where: { id: parseInt(recipeId) },
             data: {
                 aktif: false,
-                silinmeTarihi: new Date(),
-                silenKullanici: req.user.userId,
-                silmeSebebi: 'Yönetici silme işlemi'
+                updatedAt: new Date(),
+                deletedAt: new Date(),
+                deletedBy: String(req.user?.personelId || req.user?.id || req.user?.userId || ''),
+                deleteReason: 'Yönetici silme işlemi'
             }
-        }, 'RECIPE_DEACTIVATED');
+        });
 
         return deactivatedRecipe;
     });
@@ -735,7 +539,7 @@ async function deleteRecipe(req, res) {
         productionDataDeletion: true
     });
 
-        return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Recipe deactivated successfully'
     });
@@ -746,7 +550,7 @@ export default secureAPI(
     withPrismaSecurity(recipesHandler),
     {
         // RBAC Configuration
-        permission: PERMISSIONS.VIEW_PRODUCTION, // Production data access permission
+        permission: PERMISSIONS.VIEW_RECIPES,
 
         // Method-specific permissions will be checked in handlers
         // GET: VIEW_PRODUCTION (Production Staff+)
@@ -761,7 +565,7 @@ export default secureAPI(
             'page', 'limit', 'search', 'includeCosts', 'kategori', 'sortBy', 'sortOrder'
         ],
         requiredFields: {
-            POST: ['ad', 'urunId', 'porsiyon', 'receteKalemleri'],
+            POST: ['ad', 'porsiyon', 'receteKalemleri'],
             PUT: ['id'],
             DELETE: ['id']
         },

@@ -7,9 +7,10 @@
 import { secureAPI } from '../../../lib/api-security.js';
 import { withPrismaSecurity } from '../../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
-import { auditLog } from '../../../lib/audit-logger.js';
+import { auditLog, generatePersonelId } from '../../../lib/audit-logger.js';
 import { validateInput } from '../../../lib/validation.js';
 import bcrypt from 'bcrypt';
+import prisma from '../../../lib/prisma.js';
 
 /**
  * Users API Handler with Full Security Integration
@@ -45,7 +46,8 @@ async function usersHandler(req, res) {
 
         return res.status(500).json({
             error: 'User operation failed',
-            code: 'USERS_ERROR'
+            code: 'USERS_ERROR',
+            details: error.message
         });
     }
 }
@@ -81,7 +83,7 @@ async function getUsers(req, res) {
     const take = Math.min(parseInt(limit), 100); // Max 100 per page
 
     const [users, totalCount] = await Promise.all([
-        req.prisma.secureQuery('user', 'findMany', {
+        prisma.user.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -97,7 +99,7 @@ async function getUsers(req, res) {
                 gunlukUcret: req.user.roleLevel >= 80, // Only managers+ can see salary
                 sgkDurumu: true,
                 girisYili: true,
-                olusturmaTarihi: true,
+                createdAt: true, updatedAt: true,
                 sube: {
                     select: {
                         id: true,
@@ -113,7 +115,7 @@ async function getUsers(req, res) {
             skip,
             take
         }),
-        req.prisma.secureQuery('user', 'count', {
+        prisma.user.count({
             where: whereClause
         })
     ]);
@@ -164,6 +166,20 @@ async function createUser(req, res) {
         telefon, subeId, gunlukUcret, sgkDurumu, girisYili, aktif = true
     } = req.body;
 
+    // Auto-generate personelId if missing (schema requires unique String)
+    const resolvedPersonelId = personelId || await generatePersonelId();
+
+    // Normalize girisYili to DateTime if provided
+    let resolvedGirisYili = null;
+    if (girisYili) {
+        if (typeof girisYili === 'number' || (/^\d{4}$/.test(String(girisYili)))) {
+            resolvedGirisYili = new Date(Number(girisYili), 0, 1);
+        } else {
+            const d = new Date(girisYili);
+            resolvedGirisYili = isNaN(d.getTime()) ? null : d;
+        }
+    }
+
     // Business logic validation
     if (password.length < 8) {
         return res.status(400).json({
@@ -179,9 +195,20 @@ async function createUser(req, res) {
         });
     }
 
-    // Role validation
-    const validRoles = ['super_admin', 'admin', 'manager', 'supervisor', 'operator', 'editor', 'viewer', 'guest'];
-    if (!validRoles.includes(rol)) {
+    // Role validation - Prisma enum PersonelRol ile hizalı
+    const VALID_TR_ROLES = [
+        'GENEL_MUDUR',
+        'SUBE_MUDURU',
+        'URETIM_MUDURU',
+        'SEVKIYAT_MUDURU',
+        'CEP_DEPO_MUDURU',
+        'SUBE_PERSONELI',
+        'URETIM_PERSONEL',
+        'SEVKIYAT_PERSONELI',
+        'SOFOR',
+        'PERSONEL'
+    ];
+    if (!VALID_TR_ROLES.includes(rol)) {
         return res.status(400).json({
             error: 'Invalid role specified'
         });
@@ -201,9 +228,9 @@ async function createUser(req, res) {
     }
 
     // Secure transaction for user creation
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Check for existing users
-        const existingUser = await tx.secureQuery('user', 'findFirst', {
+        const existingUser = await tx.user.findFirst({
             where: {
                 OR: [
                     { email },
@@ -226,23 +253,24 @@ async function createUser(req, res) {
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
         // Create user with audit trail
-        const newUser = await tx.secureQuery('user', 'create', {
-            data: {
-                personelId,
-                ad,
-                soyad,
-                email,
-                username,
-                password: hashedPassword,
-                rol,
-                telefon: telefon || null,
-                subeId: subeId ? parseInt(subeId) : null,
-                gunlukUcret: gunlukUcret ? parseFloat(gunlukUcret) : null,
-                sgkDurumu: sgkDurumu || null,
-                girisYili: girisYili ? parseInt(girisYili) : null,
-                aktif,
-                olusturmaTarihi: new Date()
-            },
+        const createData = {
+            personelId: resolvedPersonelId,
+            ad,
+            soyad,
+            email,
+            username,
+            password: hashedPassword,
+            rol,
+            aktif
+        };
+        if (telefon !== undefined) createData.telefon = telefon || null;
+        if (subeId !== undefined) createData.subeId = subeId ? parseInt(subeId) : null;
+        if (gunlukUcret !== undefined) createData.gunlukUcret = gunlukUcret ? parseFloat(gunlukUcret) : null;
+        if (typeof sgkDurumu === 'string' && (sgkDurumu === 'VAR' || sgkDurumu === 'YOK')) createData.sgkDurumu = sgkDurumu;
+        if (resolvedGirisYili) createData.girisYili = resolvedGirisYili;
+
+        const newUser = await tx.user.create({
+            data: createData,
             select: {
                 id: true,
                 personelId: true,
@@ -257,9 +285,9 @@ async function createUser(req, res) {
                 gunlukUcret: true,
                 sgkDurumu: true,
                 girisYili: true,
-                olusturmaTarihi: true
+                createdAt: true
             }
-        }, 'USER_CREATED');
+        });
 
         return newUser;
     });
@@ -309,7 +337,7 @@ async function updateUser(req, res) {
     }
 
     // Permission checks for user modification
-    const targetUser = await req.prisma.secureQuery('user', 'findUnique', {
+    const targetUser = await prisma.user.findUnique({
         where: { id: parseInt(userId) },
         select: { id: true, rol: true, email: true }
     });
@@ -361,11 +389,22 @@ async function updateUser(req, res) {
     }
 
     // Update user with security context
-    const updatedUser = await req.prisma.secureQuery('user', 'update', {
+    const updatedUser = await prisma.user.update({
         where: { id: parseInt(userId) },
         data: {
-            ...updateData,
-            guncellemeTarihi: new Date()
+            ...(() => {
+                const data = { ...updateData };
+                if (data.girisYili) {
+                    const v = data.girisYili;
+                    if (typeof v === 'number' || (/^\d{4}$/.test(String(v)))) {
+                        data.girisYili = new Date(Number(v), 0, 1);
+                    } else {
+                        const d = new Date(v);
+                        data.girisYili = isNaN(d.getTime()) ? undefined : d;
+                    }
+                }
+                return data;
+            })()
         },
         select: {
             id: true,
@@ -381,7 +420,7 @@ async function updateUser(req, res) {
             gunlukUcret: req.user.roleLevel >= 80,
             sgkDurumu: true,
             girisYili: true,
-            guncellemeTarihi: true
+            updatedAt: true
         }
     }, 'USER_UPDATED');
 
@@ -414,7 +453,7 @@ async function deleteUser(req, res) {
     }
 
     // Get user details for audit
-    const targetUser = await req.prisma.secureQuery('user', 'findUnique', {
+    const targetUser = await prisma.user.findUnique({
         where: { id: parseInt(userId) },
         select: { id: true, rol: true, email: true, ad: true, soyad: true }
     });
@@ -439,14 +478,13 @@ async function deleteUser(req, res) {
     }
 
     // Soft delete (set inactive) instead of hard delete for audit trail
-    const deletedUser = await req.prisma.secureQuery('user', 'update', {
+    const deletedUser = await prisma.user.update({
         where: { id: parseInt(userId) },
         data: {
             aktif: false,
-            silinmeTarihi: new Date(),
-            silenKullanici: req.user.userId
+            updatedAt: new Date()
         }
-    }, 'USER_SOFT_DELETED');
+    });
 
     auditLog('USER_DELETED', 'User account deleted (soft delete)', {
         userId: req.user.userId,

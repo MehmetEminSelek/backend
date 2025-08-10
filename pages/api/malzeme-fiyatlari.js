@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../lib/rbac-enhanced.js';
 import { auditLog } from '../../lib/audit-logger.js';
 import { validateInput } from '../../lib/validation.js';
+import prisma from '../../lib/prisma.js';
 
 /**
  * Material Pricing API Handler with Full Security Integration
@@ -94,39 +95,31 @@ async function getMaterialPricing(req, res) {
             ? { kod: { equals: kod, mode: 'insensitive' } }
             : { id: parseInt(id) };
 
-        const material = await req.prisma.secureQuery('material', 'findUnique', {
+        const material = await prisma.material.findUnique({
             where: whereCondition,
-                    select: {
-                        id: true,
-                        ad: true,
-                        kod: true,
-                        tipi: true,
-                        birim: true,
-                        mevcutStok: true,
-                        minStokSeviye: true,
-                        kritikSeviye: true,
-                        aciklama: true,
+            select: {
+                id: true,
+                ad: true,
+                kod: true,
+                tipi: true,
+                birim: true,
+                mevcutStok: true,
+                minStokSeviye: true,
+                kritikSeviye: true,
+                aciklama: true,
                 aktif: true,
                 updatedAt: true,
 
                 // Price data only for authorized users
-                ...(req.user.roleLevel >= 60 && {
-                    birimFiyat: true,
-                    sonAlisFiyati: true,
-                    ortalamaMaliyet: true
-                }),
+                ...(req.user.roleLevel >= 60 && { birimFiyat: true }),
 
                 // Sensitive supplier data only for managers+
-                ...(req.user.roleLevel >= 70 && {
-                        tedarikci: true,
-                    tedarikciKodu: true,
-                    minSiparisMiktari: true
-                })
-                    }
-                });
+                ...(req.user.roleLevel >= 70 && { tedarikci: true })
+            }
+        });
 
-                if (!material) {
-                    return res.status(404).json({
+        if (!material) {
+            return res.status(404).json({
                 error: 'Material not found',
                 searchKey: kod || id
             });
@@ -140,27 +133,21 @@ async function getMaterialPricing(req, res) {
             sensitiveAccess: req.user.roleLevel >= 70
         });
 
-                return res.status(200).json({
+        return res.status(200).json({
             success: true,
             material: {
                 id: material.id,
-                    kod: material.kod,
-                    ad: material.ad,
+                kod: material.kod,
+                ad: material.ad,
                 tipi: material.tipi,
                 birim: material.birim,
-                    fiyat: material.birimFiyat || 0,
-                sonAlisFiyati: material.sonAlisFiyati || 0,
-                ortalamaMaliyet: material.ortalamaMaliyet || 0,
-                    mevcutStok: material.mevcutStok,
-                    minStokSeviye: material.minStokSeviye,
+                fiyat: material.birimFiyat || 0,
+                mevcutStok: material.mevcutStok,
+                minStokSeviye: material.minStokSeviye,
                 kritikSeviye: material.kritikSeviye,
                 aciklama: material.aciklama,
                 aktif: material.aktif,
-                ...(req.user.roleLevel >= 70 && {
-                    tedarikci: material.tedarikci,
-                    tedarikciKodu: material.tedarikciKodu,
-                    minSiparisMiktari: material.minSiparisMiktari
-                })
+                ...(req.user.roleLevel >= 70 && { tedarikci: material.tedarikci })
             }
         });
     }
@@ -200,7 +187,7 @@ async function getMaterialPricing(req, res) {
     }
 
     // Pagination and limits
-    const pageNum = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
     const skip = (pageNum - 1) * limitNum;
 
@@ -212,32 +199,25 @@ async function getMaterialPricing(req, res) {
 
     // Enhanced query with security context
     const [materials, totalCount] = await Promise.all([
-        req.prisma.secureQuery('material', 'findMany', {
+        prisma.material.findMany({
             where: whereClause,
-                    select: {
-                        id: true,
-                        ad: true,
-                        kod: true,
-                        tipi: true,
-                        birim: true,
-                        mevcutStok: true,
-                        minStokSeviye: true,
-                        kritikSeviye: true,
+            select: {
+                id: true,
+                ad: true,
+                kod: true,
+                tipi: true,
+                birim: true,
+                mevcutStok: true,
+                minStokSeviye: true,
+                kritikSeviye: true,
                 aktif: true,
                 updatedAt: true,
 
                 // Price data only for authorized users
-                ...(req.user.roleLevel >= 60 && {
-                    birimFiyat: true,
-                    sonAlisFiyati: true,
-                    ortalamaMaliyet: true
-                }),
+                ...(req.user.roleLevel >= 60 && { birimFiyat: true }),
 
                 // Sensitive supplier data only for managers+
-                ...(req.user.roleLevel >= 70 && {
-                        tedarikci: true,
-                    tedarikciKodu: true
-                })
+                ...(req.user.roleLevel >= 70 && { tedarikci: true })
             },
             orderBy: {
                 [sortField]: sortDirection
@@ -245,26 +225,18 @@ async function getMaterialPricing(req, res) {
             skip,
             take: limitNum
         }),
-        req.prisma.secureQuery('material', 'count', {
+        prisma.material.count({
             where: whereClause
         })
     ]);
 
     // Calculate pricing statistics (only for managers+)
-    const pricingStats = req.user.roleLevel >= 70 ? await req.prisma.secureQuery('material', 'aggregate', {
+    const pricingStats = req.user.roleLevel >= 70 ? await prisma.material.aggregate({
         where: { ...whereClause, birimFiyat: { gt: 0 } },
         _count: { id: true },
-        _avg: {
-            birimFiyat: true,
-            sonAlisFiyati: true,
-            ortalamaMaliyet: true
-        },
-        _min: {
-            birimFiyat: true
-        },
-        _max: {
-            birimFiyat: true
-        }
+        _avg: { birimFiyat: true },
+        _min: { birimFiyat: true },
+        _max: { birimFiyat: true }
     }) : null;
 
     auditLog('MATERIAL_PRICING_VIEW_LIST', 'Material pricing list accessed', {
@@ -274,9 +246,9 @@ async function getMaterialPricing(req, res) {
         limit: limitNum,
         filters: { search, tipi, aktif, lowPrice, highPrice },
         sensitiveAccess: req.user.roleLevel >= 70
-                });
+    });
 
-                return res.status(200).json({
+    return res.status(200).json({
         success: true,
         materials,
         pagination: {
@@ -289,8 +261,6 @@ async function getMaterialPricing(req, res) {
             pricingStatistics: {
                 totalMaterialsWithPricing: pricingStats._count.id,
                 averagePrice: pricingStats._avg?.birimFiyat || 0,
-                averagePurchasePrice: pricingStats._avg?.sonAlisFiyati || 0,
-                averageCost: pricingStats._avg?.ortalamaMaliyet || 0,
                 priceRange: {
                     min: pricingStats._min?.birimFiyat || 0,
                     max: pricingStats._max?.birimFiyat || 0
@@ -347,15 +317,15 @@ async function updateMaterialPricing(req, res) {
     }
 
     if (ortalamaMaliyet !== undefined && ortalamaMaliyet < 0) {
-                return res.status(400).json({
+        return res.status(400).json({
             error: 'Average cost cannot be negative'
         });
     }
 
     // Update material pricing with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Verify material exists
-        const material = await tx.secureQuery('material', 'findUnique', {
+        const material = await tx.material.findUnique({
             where: { id: parseInt(materialId) },
             select: {
                 id: true,
@@ -364,9 +334,9 @@ async function updateMaterialPricing(req, res) {
                 aktif: true,
                 birimFiyat: true
             }
-            });
+        });
 
-            if (!material) {
+        if (!material) {
             throw new Error('Material not found');
         }
 
@@ -413,7 +383,7 @@ async function updateMaterialPricing(req, res) {
         }
 
         // Update material
-        const updatedMaterial = await tx.secureQuery('material', 'update', {
+        const updatedMaterial = await tx.material.update({
             where: { id: parseInt(materialId) },
             data: {
                 ...updateData,
@@ -497,7 +467,7 @@ async function bulkUpdateMaterialPricing(req, res) {
     }
 
     // Bulk update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         const updatedMaterials = [];
         const errors = [];
 
@@ -513,7 +483,7 @@ async function bulkUpdateMaterialPricing(req, res) {
                 // Calculate new price
                 let newPrice = birimFiyat;
                 if (applyPercentageIncrease && percentage) {
-                    const currentMaterial = await tx.secureQuery('material', 'findUnique', {
+                    const currentMaterial = await tx.material.findUnique({
                         where: { id: parseInt(materialId) },
                         select: { birimFiyat: true }
                     });
@@ -528,7 +498,7 @@ async function bulkUpdateMaterialPricing(req, res) {
                     continue;
                 }
 
-                const updatedMaterial = await tx.secureQuery('material', 'update', {
+                const updatedMaterial = await tx.material.update({
                     where: { id: parseInt(materialId) },
                     data: {
                         birimFiyat: parseFloat(newPrice),

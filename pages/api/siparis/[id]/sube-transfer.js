@@ -71,14 +71,14 @@ async function updateBranchTransfer(req, res, orderId) {
     }
 
     // Check if order exists and get current state
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
             sipariNo: true,
             durum: true,
             musteriAd: true,
-            olusturanKullanici: true,
+            createdBy: true,
             subeNeredenId: true,
             subeNereyeId: true
         }
@@ -91,7 +91,7 @@ async function updateBranchTransfer(req, res, orderId) {
     }
 
     // Permission checks - Only managers+ can handle branch transfers
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyBranchTransfer = req.user.roleLevel >= 70; // Managers+ only
 
     if (!canModifyBranchTransfer) {
@@ -102,7 +102,7 @@ async function updateBranchTransfer(req, res, orderId) {
 
     // Validate branch IDs if provided
     if (req.body.subeNeredenId) {
-        const sourceExists = await req.prisma.secureQuery('sube', 'findUnique', {
+        const sourceExists = await prisma.sube.findUnique({
             where: { id: parseInt(req.body.subeNeredenId) },
             select: { id: true, ad: true }
         });
@@ -114,7 +114,7 @@ async function updateBranchTransfer(req, res, orderId) {
     }
 
     if (req.body.subeNereyeId) {
-        const targetExists = await req.prisma.secureQuery('sube', 'findUnique', {
+        const targetExists = await prisma.sube.findUnique({
             where: { id: parseInt(req.body.subeNereyeId) },
             select: { id: true, ad: true }
         });
@@ -169,8 +169,8 @@ async function updateBranchTransfer(req, res, orderId) {
     }
 
     // Update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
             data: {
                 ...updateData,

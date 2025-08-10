@@ -1,0 +1,209 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "products": [
+      {
+        "id": 1,
+        "ad": "Antep Peynirli Su Böreği",
+        "kod": "UR001",
+        "kategoriId": null,
+        "kategori": null,
+        "aciklama": null,
+        "birim": "KG",
+        "mevcutStok": 0,
+        "minStokSeviye": 0,
+        "maliyetFiyati": 0,
+        "karMarji": 0,
+        "karOrani": 0,
+        "satisaUygun": true,
+        "aktif": true,
+        "createdAt": "2025-08-10T13:50:52.975Z",
+        "updatedAt": "2025-08-10T13:50:52.975Z",
+        "receteler": [],
+        "fiyatlar": [
+          {
+            "id": 1,
+            "kgFiyati": 950,
+            "birim": "KG",
+            "fiyatTipi": "NORMAL",
+            "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+            "bitisTarihi": null
+          }
+        ],
+        "guncelFiyat": {
+          "id": 1,
+          "kgFiyati": 950,
+          "birim": "KG",
+          "fiyatTipi": "NORMAL",
+          "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+          "bitisTarihi": null
+        },
+        "recipeAssigned": false,
+        "recipeCount": 0
+      },
+      {
+        "id": 2,
+        "ad": "Bayram Tepsisi",
+        "kod": "UR002",
+        "kategoriId": null,
+        "kategori": null,
+        "aciklama": null,
+        "birim": "KG",
+        "mevcutStok": 0,
+        "minStokSeviye": 0,
+        "maliyetFiyati": 0,
+        "karMarji": 0,
+        "karOrani": 0,
+        "satisaUygun": true,
+        "aktif": true,
+        "createdAt": "2025-08-10T13:50:52.979Z",
+        "updatedAt": "2025-08-10T13:50:52.979Z",
+        "receteler": [],
+        "fiyatlar": [
+          {
+            "id": 2,
+            "kgFiyati": 1600,
+            "birim": "KG",
+            "fiyatTipi": "NORMAL",
+            "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+            "bitisTarihi": null
+          }
+        ],
+        "guncelFiyat": {
+          "id": 2,
+          "kgFiyati": 1600,
+          "birim": "KG",
+          "fiyatTipi": "NORMAL",
+          "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+          "bitisTarihi": null
+        },
+        "recipeAssigned": false,
+        "recipeCount": 0
+      },
+      {
+        "id": 13,
+        "ad": "Bülbül Yuvası",
+        "kod": "UR013",
+        "kategoriId": null,
+        "kategori": null,
+        "aciklama": null,
+        "birim": "KG",
+        "mevcutStok": 0,
+        "minStokSeviye": 0,
+        "maliyetFiyati": 0,
+        "karMarji": 0,
+        "karOrani": 0,
+        "satisaUygun": true,
+        "aktif": true,
+        "createdAt": "2025-08-10T13:50:53.002Z",
+        "updatedAt": "2025-08-10T13:50:53.002Z",
+        "receteler": [],
+        "fiyatlar": [
+          {
+            "id": 13,
+            "kgFiyati": 1650,
+            "birim": "KG",
+            "fiyatTipi": "NORMAL",
+            "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+            "bitisTarihi": null
+          }
+        ],
+        "guncelFiyat": {
+          "id": 13,
+          "kgFiyati": 1650,
+          "birim": "KG",
+          "fiyatTipi": "NORMAL",
+          "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+          "bitisTarihi": null
+        },
+        "recipeAssigned": false,
+        "recipeCount": 0
+      },
+      {
+        "id": 12,
+        "ad": "Burma Kadayıf",
+        "kod": "UR012",
+        "kategoriId": null,
+        "kategori": null,
+        "aciklama": null,
+        "birim": "KG",
+        "mevcutStok": 0,
+        "minStokSeviye": 0,
+        "maliyetFiyati": 0,
+        "karMarji": 0,
+        "karOrani": 0,
+        "satisaUygun": true,
+        "aktif": true,
+        "createdAt": "2025-08-10T13:50:53.000Z",
+        "updatedAt": "2025-08-10T13:50:53.000Z",
+        "receteler": [],
+        "fiyatlar": [
+          {
+            "id": 12,
+            "kgFiyati": 1450,
+            "birim": "KG",
+            "fiyatTipi": "NORMAL",
+            "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+            "bitisTarihi": null
+          }
+        ],
+        "guncelFiyat": {
+          "id": 12,
+          "kgFiyati": 1450,
+          "birim": "KG",
+          "fiyatTipi": "NORMAL",
+          "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+          "bitisTarihi": null
+        },
+        "recipeAssigned": false,
+        "recipeCount": 0
+      },
+      {
+        "id": 3,
+        "ad": "Cevizli Bülbül Yuvası",
+        "kod": "UR003",
+        "kategoriId": null,
+        "kategori": null,
+        "aciklama": null,
+        "birim": "KG",
+        "mevcutStok": 0,
+        "minStokSeviye": 0,
+        "maliyetFiyati": 0,
+        "karMarji": 0,
+        "karOrani": 0,
+        "satisaUygun": true,
+        "aktif": true,
+        "createdAt": "2025-08-10T13:50:52.981Z",
+        "updatedAt": "2025-08-10T13:50:52.981Z",
+        "receteler": [],
+        "fiyatlar": [
+          {
+            "id": 3,
+            "kgFiyati": 1450,
+            "birim": "KG",
+            "fiyatTipi": "NORMAL",
+            "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+            "bitisTarihi": null
+          }
+        ],
+        "guncelFiyat": {
+          "id": 3,
+          "kgFiyati": 1450,
+          "birim": "KG",
+          "fiyatTipi": "NORMAL",
+          "baslangicTarihi": "2025-08-10T13:50:53.053Z",
+          "bitisTarihi": null
+        },
+        "recipeAssigned": false,
+        "recipeCount": 0
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 5,
+      "total": 38,
+      "pages": 8
+    }
+  }
+}

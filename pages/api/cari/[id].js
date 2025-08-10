@@ -6,9 +6,9 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
         // Cari detay
-        const cari = await prisma.cari.findUnique({
+        const cari = await prisma.cariMusteri.findUnique({
             where: { id },
-            include: { hareketler: true, siparisler: true },
+            include: { adresler: true, siparisler: true },
         });
         if (!cari) return res.status(404).json({ error: 'Cari bulunamadı' });
         return res.status(200).json(cari);
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
         // Cari güncelle
         const data = req.body;
-        const guncellenen = await prisma.cari.update({
+        const guncellenen = await prisma.cariMusteri.update({
             where: { id },
             data,
         });
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'DELETE') {
         // Cari sil
-        await prisma.cari.delete({ where: { id } });
+        await prisma.cariMusteri.delete({ where: { id } });
         return res.status(204).end();
     }
     res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);

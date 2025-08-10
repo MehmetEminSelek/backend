@@ -206,6 +206,11 @@ model Urun {
   lastModifiedAt       DateTime? // Son değişiklik tarihi
   lastAction           String? // Son yapılan işlem ("FİYAT_GÜNCELLENDİ", "STK_DEĞİŞTİ", vb.)
 
+  // Soft delete metadata
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+
   @@index([kategoriId])
   @@index([kod])
   @@index([aktif])
@@ -255,6 +260,11 @@ model UrunFiyat {
   degisiklikSebebi String?   // "GENEL ZAM", "MALZEME ZAMMI", "KAMPANYA" vb.
   eskiFiyat        Float?    // Önceki fiyat (karşılaştırma için)
   yuzdelik         Float?    // Değişim yüzdesi
+
+  // Soft delete metadata
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
 
   @@unique([urunId, baslangicTarihi, fiyatTipi])
   @@index([aktif])
@@ -396,14 +406,9 @@ model Cari {
   aktif Boolean @default(true)
 
   // Relations
-  siparisler Siparis[]
-  hareketler CariHareket[]
-  odemeler   CariOdeme[]
-  adresler   CariAdres[] // YENİ: Çoklu adres desteği
+  // REMOVED relations - only using CariMusteri now
   
-  // CSV'den gelen müşteri verileri ile ilişki
-  cariMusteriRelation CariMusteriRelation?
-  cariMusteriler CariMusteri[]
+  // REMOVED: old relations - not needed anymore
 
   // Audit
   createdAt DateTime @default(now())
@@ -423,8 +428,12 @@ model Cari {
 // YENİ MODEL: Cari Adres Yönetimi
 model CariAdres {
   id     Int  @id @default(autoincrement())
-  cariId Int
-  cari   Cari @relation(fields: [cariId], references: [id], onDelete: Cascade)
+  
+  // REMOVED: Ana Cari relation - only using CariMusteri now
+  
+  // CariMusteri relation - CSV'den gelen müşteriler için
+  cariMusteriId Int?
+  cariMusteri   CariMusteri? @relation(fields: [cariMusteriId], references: [id], onDelete: Cascade)
 
   // Adres Bilgileri
   tip          AdresTipi @default(DIGER)
@@ -443,7 +452,7 @@ model CariAdres {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@index([cariId])
+  @@index([cariMusteriId])
   @@index([tip])
   @@index([varsayilan])
 }
@@ -478,9 +487,13 @@ model CariMusteri {
   // Durum
   aktif       Boolean @default(true)
   
-  // İlerleyen süreçte ana Cari tablosu ile ilişki kurulabilir
-  cariId      Int?    // Ana Cari kaydı ile eşleştirme için
-  cari        Cari?   @relation(fields: [cariId], references: [id])
+  // REMOVED: Old Cari relation - using only CariMusteri now
+  
+  // Relations
+  adresler    CariAdres[]
+  siparisler  Siparis[] // Orders by this customer
+  hareketler  CariHareket[] // Financial movements
+  odemeler    CariOdeme[] // Payment records
   
   // Audit
   createdAt   DateTime @default(now())
@@ -491,12 +504,7 @@ model CariMusteri {
   @@index([aktif])
 }
 
-// Ana Cari modeline CariMusteri relation ekliyoruz
-model CariMusteriRelation {
-  id     Int    @id @default(autoincrement())
-  cariId Int    @unique
-  cari   Cari   @relation(fields: [cariId], references: [id], onDelete: Cascade)
-}
+// REMOVED: CariMusteriRelation - not needed anymore
 
 // ===================================================================
 // 📋 ORDER MANAGEMENT (Best Practice)
@@ -527,11 +535,12 @@ model Siparis {
 
   // Date Info
   tarih        DateTime  
-  teslimTarihi DateTime? 
+  teslimTarihi DateTime?
+  teslimSaati  String?    // "14:30" format - API feature requirement 
 
   // Customer Info  
   cariId Int?
-  cari   Cari? @relation(fields: [cariId], references: [id])
+  cari   CariMusteri? @relation(fields: [cariId], references: [id])
 
   // Manual Customer (CSV'den Gönderen/Alıcı)
   gonderenAdi   String
@@ -566,9 +575,16 @@ model Siparis {
   karOrani                Float?    @default(0) // Kar oranı %
   maliyetGuncellemeTarihi DateTime? // Maliyet hesaplama tarihi
 
+  // İNDİRİM ALANLARI - NULLABLE (API UYUMLULUĞU)
+  indirimTutari Float? @default(0) // İndirim tutarı
+  indirimSebebi String? // İndirim sebebi açıklaması
+
   // Status
   durum       SiparisDurumu @default(ONAY_BEKLEYEN)
   kargoDurumu KargoDurumu   @default(ADRESE_TESLIMAT)
+  
+  // Payment Status - API feature requirement
+  odemeDurumu String? @default("bekliyor") // bekliyor, kismi, tamamlandi, iptal
 
   // Cargo Info
   kargoSirketi String?
@@ -795,6 +811,11 @@ model Recipe {
   lastModifiedAt       DateTime? // Son değişiklik tarihi
   lastAction           String? // Son yapılan işlem ("REÇETE_GÜNCELLENDİ", "MALİYET_HESAPLANDI", vb.)
 
+  // Soft delete metadata
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+
   @@unique([urunId, versiyon])
   @@index([aktif])
   @@index([urunId])
@@ -950,9 +971,9 @@ enum TransferDurumu {
 // ===================================================================
 
 model CariHareket {
-  id     Int  @id @default(autoincrement())
-  cariId Int
-  cari   Cari @relation(fields: [cariId], references: [id])
+  id            Int  @id @default(autoincrement())
+  cariMusteriId Int
+  cariMusteri   CariMusteri @relation(fields: [cariMusteriId], references: [id])
 
   // Transaction Details
   tip      HareketTipi
@@ -978,7 +999,7 @@ model CariHareket {
   createdBy Int?
   user      User?    @relation(fields: [createdBy], references: [id])
 
-  @@index([cariId])
+  @@index([cariMusteriId])
   @@index([tip])
   @@index([createdAt])
 }
@@ -990,9 +1011,9 @@ enum HareketTipi {
 }
 
 model CariOdeme {
-  id     Int  @id @default(autoincrement())
-  cariId Int
-  cari   Cari @relation(fields: [cariId], references: [id])
+  id            Int  @id @default(autoincrement())
+  cariMusteriId Int
+  cariMusteri   CariMusteri @relation(fields: [cariMusteriId], references: [id])
 
   // Payment Details
   tutar        Float
@@ -1024,7 +1045,7 @@ model CariOdeme {
   createdBy Int?
   user      User?    @relation(fields: [createdBy], references: [id])
 
-  @@index([cariId])
+  @@index([cariMusteriId])
   @@index([odemeYontemi])
   @@index([durum])
   @@index([odemeTarihi])

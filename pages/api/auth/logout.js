@@ -11,7 +11,7 @@ async function handler(req, res) {
 
     try {
         // Extract user info from token if available
-        const token = req.headers.authorization?.replace('Bearer ', '');
+        const token = req.headers?.authorization?.replace('Bearer ', '');
         let user = null;
 
         if (token) {

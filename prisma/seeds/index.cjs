@@ -1,0 +1,61 @@
+// ===================================================================
+// 🌱 ÖMER GÜLLÜ SİSTEMİ - ANA SEED DOSYASI
+// Tüm CSV verilerini sıralı olarak veritabanına yükler
+// ===================================================================
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+// Seed dosyalarını import et
+const { seedPersonelBilgileri } = require('./seed-personel-bilgileri.cjs');
+const { seedOdemeYontemleri } = require('./seed-odeme-yontemleri.cjs');
+const { seedSubeOperasyonBirimleri } = require('./seed-sube-operasyon.cjs');
+const { seedHammadeYariMamuller } = require('./seed-hammadde-yari-mamuller.cjs');
+const { seedGuncelUrunFiyatlari } = require('./seed-urun-ve-fiyatlar.cjs');
+const { seedReceteler } = require('./seed-receteler.cjs');
+
+const { seedSiparisDropdownListeleri } = require('./seed-teslimat-turu.cjs');
+const { seedCariMusteriler } = require('./seed-cari-musteriler.cjs');
+
+async function main() {
+    console.log('🚀 Ömer Güllü Sistemi - Toplu Seed İşlemi Başlatılıyor...\n');
+
+    try {
+        // 1. Temel veriler
+        console.log('1️⃣ Temel veriler yükleniyor...');
+        await seedPersonelBilgileri();
+        await seedOdemeYontemleri();
+        await seedSubeOperasyonBirimleri();
+
+        // 2. Ürün ve malzeme verileri
+        console.log('\n2️⃣ Ürün ve malzeme verileri yükleniyor...');
+        await seedHammadeYariMamuller();
+        await seedGuncelUrunFiyatlari();
+        await seedReceteler();
+
+        // 3. Sipariş sistemi verileri
+        console.log('\n3️⃣ Sipariş sistemi verileri yükleniyor...');
+        await seedSiparisDropdownListeleri();
+
+        // 4. Müşteri verileri
+        console.log('\n4️⃣ Müşteri verileri yükleniyor...');
+        await seedCariMusteriler();
+
+        console.log('\n🎉 TÜM SEED İŞLEMLERİ BAŞARIYLA TAMAMLANDI!');
+        console.log('📊 Sistem kullanıma hazır.');
+
+    } catch (error) {
+        console.error('\n❌ Seed işlemi sırasında hata oluştu:', error);
+        throw error;
+    }
+}
+
+// Ana fonksiyonu çalıştır
+main()
+    .catch((e) => {
+        console.error(e);
+        process.exit(1);
+    })
+    .finally(async () => {
+        await prisma.$disconnect();
+    });

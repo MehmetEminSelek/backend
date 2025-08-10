@@ -1,0 +1,38 @@
+{
+    "info": {
+        "name": "OG Tests",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Login",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"kullaniciAdi\": \"baris.gullu\",\n  \"sifre\": \"bar123\"\n}"
+                },
+                "url": "http://localhost:3000/api/auth/login"
+            }
+        },
+        {
+            "name": "Dropdown",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer TOKEN_BURAYA"
+                    }
+                ],
+                "url": "http://localhost:3000/api/dropdown"
+            }
+        }
+    ]
+}

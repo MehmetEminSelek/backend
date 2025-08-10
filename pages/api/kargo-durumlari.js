@@ -81,21 +81,21 @@ async function getCargoStatuses(req, res) {
     console.log('GET /api/kargo-durumlari request received...');
 
     // Enhanced security transaction for cargo status data
-    const cargoData = await req.prisma.secureTransaction(async (tx) => {
+    const cargoData = await prisma.$transaction(async (tx) => {
         // Static cargo status definitions
-            const kargoDurumlari = [
-                {
-                    kod: 'KARGOYA_VERILECEK',
-                    ad: 'Kargoya Verilecek',
-                    renk: 'primary',
+        const kargoDurumlari = [
+            {
+                kod: 'KARGOYA_VERILECEK',
+                ad: 'Kargoya Verilecek',
+                renk: 'primary',
                 aciklama: 'Sipariş hazırlandı, kargoya verilmeyi bekliyor',
                 sira: 1,
                 aktif: true
-                },
-                {
+            },
+            {
                 kod: 'KARGOYA_VERILDI',
                 ad: 'Kargoya Verildi',
-                    renk: 'info',
+                renk: 'info',
                 aciklama: 'Sipariş kargo firmasına teslim edildi',
                 sira: 2,
                 aktif: true
@@ -115,11 +115,11 @@ async function getCargoStatuses(req, res) {
                 aciklama: 'Paket dağıtım aracında, teslimata gidiyor',
                 sira: 4,
                 aktif: true
-                },
-                {
-                    kod: 'TESLIM_EDILDI',
-                    ad: 'Teslim Edildi',
-                    renk: 'success',
+            },
+            {
+                kod: 'TESLIM_EDILDI',
+                ad: 'Teslim Edildi',
+                renk: 'success',
                 aciklama: 'Paket başarıyla teslim edildi',
                 sira: 5,
                 aktif: true
@@ -192,7 +192,7 @@ async function getCargoStatuses(req, res) {
         }
 
         // Get orders with cargo information
-        const orders = await tx.secureQuery('siparis', 'findMany', {
+        const orders = await tx.siparis.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -287,12 +287,12 @@ async function getCargoStatuses(req, res) {
             };
         }
 
-                return {
+        return {
             statuses: kargoDurumlari,
             orders: orders,
             summary
-                };
-            });
+        };
+    });
 
     // Enhanced audit logging
     auditLog('CARGO_STATUS_ACCESS', 'Cargo status accessed', {
@@ -304,7 +304,7 @@ async function getCargoStatuses(req, res) {
         roleLevel: req.user.roleLevel
     });
 
-            return res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: 'Cargo status data retrieved successfully',
         data: {
@@ -367,9 +367,9 @@ async function updateCargoStatus(req, res) {
     }
 
     // Update cargo status with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // Get current order
-        const currentOrder = await tx.secureQuery('siparis', 'findUnique', {
+        const currentOrder = await tx.siparis.findUnique({
             where: { id: parseInt(siparisId) },
             select: {
                 id: true,
@@ -413,7 +413,7 @@ async function updateCargoStatus(req, res) {
         }
 
         // Update order
-        const updatedOrder = await tx.secureQuery('siparis', 'update', {
+        const updatedOrder = await tx.siparis.update({
             where: { id: parseInt(siparisId) },
             data: updateData
         }, 'CARGO_STATUS_UPDATED');

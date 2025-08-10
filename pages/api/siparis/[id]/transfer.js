@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../../../lib/rbac-enhanced.js';
 import { auditLog } from '../../../../lib/audit-logger.js';
 import { validateInput } from '../../../../lib/validation.js';
+import prisma from '../../../../lib/prisma.js';
 
 /**
  * Transfer API Handler with Full Security Integration
@@ -68,14 +69,13 @@ async function updateTransferInfo(req, res, orderId) {
     }
 
     // Check if order exists and get current state
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
-            sipariNo: true,
+            siparisNo: true,
             durum: true,
-            musteriAd: true,
-            olusturanKullanici: true,
+            createdBy: true,
             hedefSubeId: true
         }
     });
@@ -87,7 +87,7 @@ async function updateTransferInfo(req, res, orderId) {
     }
 
     // Permission checks
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyTransfer = req.user.roleLevel >= 70 || isOwner; // Managers+ or owner
 
     if (!canModifyTransfer) {
@@ -130,23 +130,19 @@ async function updateTransferInfo(req, res, orderId) {
     }
 
     // Update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
-            data: {
-                ...updateData,
-                guncellemeTarihi: new Date(),
-                guncelleyenKullanici: req.user.userId
-            },
+            data: updateData,
             select: {
                 id: true,
-                sipariNo: true,
+                siparisNo: true,
                 durum: true,
                 hedefSubeId: true,
                 transferTarihi: true,
                 transferNotu: true
             }
-        }, 'TRANSFER_UPDATED');
+        });
 
         return updatedOrder;
     });
@@ -155,7 +151,7 @@ async function updateTransferInfo(req, res, orderId) {
     auditLog('TRANSFER_UPDATED', 'Transfer information updated', {
         userId: req.user.userId,
         orderId,
-        orderNumber: result.sipariNo,
+        orderNumber: result.siparisNo,
         changes: changeLog,
         isOwner,
         userRole: req.user.rol

@@ -11,10 +11,13 @@
     "test": "node tests/api-test-suite.js",
     "test:security": "node tests/security/automated-security-tests.js",
     "test:load": "node tests/load-test.js",
+    "test:smoke": "node tests/smoke.js",
+    "test:extended": "node tests/extended.js",
+    "test:api": "node tests/api-sanity.js",
     "deploy": "node scripts/production-deployment.js",
     "db:migrate": "npx prisma migrate deploy",
     "db:generate": "npx prisma generate",
-    "db:seed": "node prisma/seeds/index.js",
+    "db:seed": "node prisma/seeds/index.cjs",
     "monitoring:start": "node scripts/start-monitoring.js",
     "health": "curl -f http://localhost:3000/api/health || exit 1",
     "lint": "eslint . --ext .js,.ts",
@@ -53,7 +56,7 @@
     "typescript": "^5.3.3"
   },
   "prisma": {
-    "seed": "node prisma/seeds/index.js"
+    "seed": "node prisma/seeds/index.cjs"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../../../lib/rbac-enhanced.js';
 import { auditLog } from '../../../../lib/audit-logger.js';
 import { validateInput } from '../../../../lib/validation.js';
+import prisma from '../../../../lib/prisma.js';
 
 /**
  * Cargo API Handler with Full Security Integration
@@ -59,11 +60,11 @@ async function cargoHandler(req, res) {
  * Get Cargo Information
  */
 async function getCargoInfo(req, res, orderId) {
-    const cargoInfo = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const cargoInfo = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
-            sipariNo: true,
+            siparisNo: true,
             durum: true,
             kargoDurumu: true,
             kargoSirketi: true,
@@ -71,15 +72,11 @@ async function getCargoInfo(req, res, orderId) {
             kargoNotu: true,
             kargoTarihi: true,
             teslimTarihi: true,
-            teslimatTarihi: true,
             hedefSubeId: true,
-            musteriAd: true,
-            musteriAdres: true,
             hedefSube: {
                 select: {
                     id: true,
-                    ad: true,
-                    adres: true
+                    ad: true
                 }
             }
         }
@@ -94,7 +91,7 @@ async function getCargoInfo(req, res, orderId) {
     auditLog('CARGO_INFO_VIEW', 'Cargo information accessed', {
         userId: req.user.userId,
         orderId,
-        orderNumber: cargoInfo.sipariNo
+        orderNumber: cargoInfo.siparisNo
     });
 
     return res.status(200).json({
@@ -124,16 +121,16 @@ async function updateCargoInfo(req, res, orderId) {
     }
 
     // Check if order exists and get current state
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
-            sipariNo: true,
+            siparisNo: true,
             durum: true,
             kargoDurumu: true,
             kargoSirketi: true,
             kargoTakipNo: true,
-            olusturanKullanici: true
+            createdBy: true
         }
     });
 
@@ -144,7 +141,7 @@ async function updateCargoInfo(req, res, orderId) {
     }
 
     // Permission checks
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canModifyCargo = req.user.roleLevel >= 60 || isOwner; // Supervisors+ or owner
 
     if (!canModifyCargo) {
@@ -155,8 +152,7 @@ async function updateCargoInfo(req, res, orderId) {
 
     // Business rule validation
     const validCargoStatuses = [
-        'HAZIRLANACAK', 'HAZIRLANIYOR', 'KARGOYA_VERILECEK', 'KARGODA',
-        'SUBEDE_TESLIM', 'ADRESE_TESLIMAT', 'TESLIM_EDILDI'
+        'KARGOYA_VERILECEK', 'KARGODA', 'TESLIM_EDILDI', 'SUBEYE_GONDERILECEK', 'SUBEDE_TESLIM', 'ADRESE_TESLIMAT', 'SUBEDEN_SUBEYE', 'IPTAL'
     ];
 
     if (req.body.kargoDurumu && !validCargoStatuses.includes(req.body.kargoDurumu)) {
@@ -167,7 +163,7 @@ async function updateCargoInfo(req, res, orderId) {
 
     // Tracking number validation
     if (req.body.kargoTakipNo && req.body.kargoTakipNo.length > 50) {
-                    return res.status(400).json({
+        return res.status(400).json({
             error: 'Tracking number too long (max 50 characters)'
         });
     }
@@ -182,7 +178,12 @@ async function updateCargoInfo(req, res, orderId) {
 
     for (const field of allowedFields) {
         if (req.body[field] !== undefined && req.body[field] !== currentOrder[field]) {
-            updateData[field] = req.body[field];
+            if (field === 'hedefSubeId') {
+                const sid = parseInt(req.body[field]);
+                if (!Number.isNaN(sid)) updateData[field] = sid;
+            } else {
+                updateData[field] = req.body[field];
+            }
             changeLog.push(`${field}: ${currentOrder[field] || 'null'} → ${req.body[field] || 'null'}`);
         }
     }
@@ -201,26 +202,12 @@ async function updateCargoInfo(req, res, orderId) {
         if (!isNaN(deliveryDate.getTime())) {
             updateData.teslimTarihi = deliveryDate;
             changeLog.push('teslimTarihi updated');
-
-            // Auto-update order status if delivered
-            updateData.durum = 'teslim_edildi';
-            changeLog.push('durum: auto-updated to teslim_edildi');
         }
     }
 
     // Auto-update order status based on cargo status
-    if (req.body.kargoDurumu) {
-        switch (req.body.kargoDurumu) {
-            case 'KARGODA':
-                updateData.durum = 'kargoda';
-                break;
-            case 'TESLIM_EDILDI':
-                updateData.durum = 'teslim_edildi';
-                if (!updateData.teslimTarihi) {
-                    updateData.teslimTarihi = new Date();
-                }
-                break;
-        }
+    if (req.body.kargoDurumu === 'TESLIM_EDILDI' && !updateData.teslimTarihi) {
+        updateData.teslimTarihi = new Date();
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -230,17 +217,13 @@ async function updateCargoInfo(req, res, orderId) {
     }
 
     // Update with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
-            data: {
-                ...updateData,
-                guncellemeTarihi: new Date(),
-                guncelleyenKullanici: req.user.userId
-            },
+            data: updateData,
             select: {
                 id: true,
-                sipariNo: true,
+                siparisNo: true,
                 durum: true,
                 kargoDurumu: true,
                 kargoSirketi: true,
@@ -248,7 +231,7 @@ async function updateCargoInfo(req, res, orderId) {
                 kargoTarihi: true,
                 teslimTarihi: true
             }
-        }, 'CARGO_UPDATED');
+        });
 
         return updatedOrder;
     });
@@ -257,7 +240,7 @@ async function updateCargoInfo(req, res, orderId) {
     auditLog('CARGO_UPDATED', 'Cargo information updated', {
         userId: req.user.userId,
         orderId,
-        orderNumber: result.sipariNo,
+        orderNumber: result.siparisNo,
         changes: changeLog,
         isOwner,
         userRole: req.user.rol

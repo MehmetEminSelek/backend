@@ -112,7 +112,7 @@ async function getSalesReportList(req, res) {
     };
 
     // Get quick statistics for dashboard
-    const quickStats = await req.prisma.secureQuery('siparis', 'aggregate', {
+    const quickStats = await prisma.siparis.aggregate({
         where: {
             durum: { not: 'IPTAL' },
             onaylanmaTarihi: {
@@ -217,7 +217,7 @@ async function generateSalesReport(req, res) {
     console.log(`📊 Generating sales report: ${startDate} to ${endDate}, Type: ${reportType}, User: ${req.user.userId}`);
 
     // Enhanced transaction for report generation
-    const reportData = await req.prisma.secureTransaction(async (tx) => {
+    const reportData = await prisma.$transaction(async (tx) => {
         // Get orders with security filtering
         const whereClause = {
             durum: { not: 'IPTAL' },
@@ -233,7 +233,7 @@ async function generateSalesReport(req, res) {
         }
 
         // Get orders data
-        const siparisler = await tx.secureQuery('siparis', 'findMany', {
+        const siparisler = await tx.siparis.findMany({
             where: whereClause,
             select: {
                 id: true,
@@ -345,7 +345,7 @@ async function generateSalesReport(req, res) {
             .sort((a, b) => b.totalRevenue - a.totalRevenue)
             .slice(0, 10);
 
-            return {
+        return {
             reportInfo: {
                 generatedAt: new Date(),
                 generatedBy: req.user.userId,
@@ -356,8 +356,8 @@ async function generateSalesReport(req, res) {
                 filters: { subeId, kategoriId, urunId }
             },
             data: reportResults
-            };
-        });
+        };
+    });
 
     // Enhanced audit logging for sensitive business intelligence access
     auditLog('SALES_REPORT_GENERATED', 'Sales report generated', {

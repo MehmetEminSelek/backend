@@ -54,14 +54,14 @@ async function deliveryHandler(req, res) {
  */
 async function markAsDelivered(req, res, orderId) {
     // Check if order exists and get current state
-    const currentOrder = await req.prisma.secureQuery('siparisFormu', 'findUnique', {
+    const currentOrder = await prisma.siparis.findUnique({
         where: { id: orderId },
         select: {
             id: true,
             sipariNo: true,
             durum: true,
             musteriAd: true,
-            olusturanKullanici: true
+            createdBy: true
         }
     });
 
@@ -72,7 +72,7 @@ async function markAsDelivered(req, res, orderId) {
     }
 
     // Permission checks
-    const isOwner = currentOrder.olusturanKullanici === req.user.userId;
+    const isOwner = currentOrder.createdBy === req.user.userId;
     const canMarkDelivered = req.user.roleLevel >= 60 || isOwner; // Supervisors+ or owner
 
     if (!canMarkDelivered) {
@@ -95,8 +95,8 @@ async function markAsDelivered(req, res, orderId) {
     }
 
     // Update order with transaction
-    const result = await req.prisma.secureTransaction(async (tx) => {
-        const updatedOrder = await tx.secureQuery('siparisFormu', 'update', {
+    const result = await prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.siparis.update({
             where: { id: orderId },
             data: {
                 durum: 'teslim_edildi',

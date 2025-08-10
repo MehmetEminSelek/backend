@@ -22,7 +22,8 @@ export default async function handler(req, res) {
 
         // Quick database check
         try {
-            const { PrismaClient } = require('@prisma/client');
+            const prismaModule = await import('@prisma/client');
+            const PrismaClient = prismaModule.PrismaClient;
             const prisma = new PrismaClient();
 
             await prisma.$queryRaw`SELECT 1`;

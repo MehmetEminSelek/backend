@@ -115,7 +115,7 @@ async function getCRMReportList(req, res) {
     };
 
     // Get quick CRM statistics
-    const quickCRMStats = await req.prisma.secureQuery('cariMusteri', 'aggregate', {
+    const quickCRMStats = await prisma.cariMusteri.aggregate({
         where: {
             aktif: true,
             kayitTarihi: {
@@ -215,7 +215,7 @@ async function generateCRMReport(req, res) {
     console.log(`🎯 Generating CRM report: ${startDate} to ${endDate}, Type: ${reportType}, User: ${req.user.userId}`);
 
     // Enhanced transaction for CRM report generation with privacy protection
-    const reportData = await req.prisma.secureTransaction(async (tx) => {
+    const reportData = await prisma.$transaction(async (tx) => {
         // Build where clause for orders
         const orderWhereClause = {
             durum: { not: 'IPTAL' },
@@ -231,7 +231,7 @@ async function generateCRMReport(req, res) {
         }
 
         // Get orders with customer data (with privacy controls)
-        const siparisler = await tx.secureQuery('siparis', 'findMany', {
+        const siparisler = await tx.siparis.findMany({
             where: orderWhereClause,
             select: {
                 id: true,

@@ -1,10 +1,7 @@
 import prisma from '../../../lib/prisma.js';
+import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
 
-export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') return res.status(200).end();
+export default withCorsAndAuth(async function handler(req, res) {
 
     if (req.method === 'GET') {
         try {
@@ -84,4 +81,4 @@ export default async function handler(req, res) {
 
     res.setHeader('Allow', ['GET', 'OPTIONS']);
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
-} 
+}); 

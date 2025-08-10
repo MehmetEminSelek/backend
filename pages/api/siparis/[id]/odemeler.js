@@ -10,6 +10,7 @@ import { withPrismaSecurity } from '../../../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../../../lib/rbac-enhanced.js';
 import { auditLog } from '../../../../lib/audit-logger.js';
 import { validateInput } from '../../../../lib/validation.js';
+import prisma from '../../../../lib/prisma.js';
 
 /**
  * Payment API Handler with Full Security Integration
@@ -54,24 +55,15 @@ async function paymentHandler(req, res) {
  * Get Payments for Order
  */
 async function getPayments(req, res, siparisId) {
-    // Database query with security context
-    const payments = await req.prisma.secureQuery('odeme', 'findMany', {
-        where: {
-            siparisId: parseInt(siparisId)
-        },
-        include: {
+    const payments = await prisma.cariOdeme.findMany({
+        where: { siparisId: parseInt(siparisId) },
+        orderBy: { odemeTarihi: 'desc' },
+        select: {
+            id: true,
+            tutar: true,
             odemeYontemi: true,
-            siparis: {
-                select: {
-                    id: true,
-                    siparisTarihi: true,
-                    toplamTutar: true,
-                    durum: true
-                }
-            }
-        },
-        orderBy: {
-            odemeTarihi: 'desc'
+            odemeTarihi: true,
+            aciklama: true
         }
     });
 
@@ -93,110 +85,75 @@ async function getPayments(req, res, siparisId) {
 async function createPayment(req, res, siparisId) {
     // Input validation with security checks
     const validationResult = validateInput(req.body, {
-        requiredFields: ['miktar', 'odemeYontemiId'],
-        allowedFields: ['miktar', 'odemeYontemiId', 'aciklama', 'referansNo'],
+        requiredFields: ['tutar', 'odemeYontemi'],
+        allowedFields: ['tutar', 'odemeYontemi', 'aciklama', 'referansNo'],
         requireSanitization: true
     });
 
     if (!validationResult.isValid) {
         return res.status(400).json({
-            error: 'Invalid payment data',
+            error: 'Geçersiz veri formatı',
             details: validationResult.errors
         });
     }
 
-    const { miktar, odemeYontemiId, aciklama, referansNo } = req.body;
+    const { tutar, odemeYontemi, aciklama, referansNo } = req.body;
 
     // Business logic validation
-    if (!miktar || miktar <= 0) {
+    if (!tutar || tutar <= 0) {
         return res.status(400).json({
-            error: 'Payment amount must be greater than 0'
+            error: 'Ödeme tutarı 0’dan büyük olmalı'
         });
     }
 
     // Secure transaction with enhanced logging
-    const result = await req.prisma.secureTransaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
         // 1. Get order details
-        const siparis = await tx.secureQuery('siparisFormu', 'findUnique', {
+        const siparis = await tx.siparis.findUnique({
             where: { id: parseInt(siparisId) },
-            include: {
-                cari: {
-                    select: {
-                        id: true,
-                        ad: true,
-                        telefon: true,
-                        email: true
-                    }
-                }
-            }
+            select: { id: true, cariId: true, toplamTutar: true, durum: true }
         });
 
         if (!siparis) {
             throw new Error('Order not found');
         }
 
-        // 2. Create customer if missing (enhanced security)
-        let cariMusteri = siparis.cari;
-        if (!cariMusteri && siparis.musteriAd) {
-            cariMusteri = await tx.secureQuery('cariMusteri', 'create', {
-                data: {
-                    ad: siparis.musteriAd,
-                    telefon: siparis.musteriTelefon || '',
-                    email: siparis.musteriEmail || '',
-                    adres: siparis.musteriAdres || '',
-                    sehir: siparis.musteriSehir || '',
-                    aktif: true
-                }
-            }, 'CUSTOMER_AUTO_CREATED');
-
-            // Link customer to order
-            await tx.secureQuery('siparisFormu', 'update', {
-                where: { id: parseInt(siparisId) },
-                data: { musteriId: cariMusteri.id }
-            }, 'ORDER_CUSTOMER_LINKED');
+        if (!siparis.cariId) {
+            throw new Error('Sipariş bir cari ile ilişkilendirilmemiş');
         }
 
         // 3. Calculate payment totals
-        const existingPayments = await tx.secureQuery('odeme', 'findMany', {
-            where: { siparisId: parseInt(siparisId) }
-        });
+        const existingPayments = await tx.cariOdeme.findMany({ where: { siparisId: parseInt(siparisId) } });
 
-        const totalPaid = existingPayments.reduce((sum, payment) => sum + payment.miktar, 0);
-        const newTotal = totalPaid + parseFloat(miktar);
+        const totalPaid = existingPayments.reduce((sum, p) => sum + (p.tutar || 0), 0);
+        const newTotal = totalPaid + parseFloat(tutar);
 
-        if (newTotal > siparis.toplamTutar) {
+        if (newTotal > (siparis.toplamTutar || 0)) {
             throw new Error('Payment amount exceeds order total');
         }
 
-        // 4. Create payment record
-        const payment = await tx.secureQuery('odeme', 'create', {
+        // 4. Create payment record (CariOdeme)
+        const payment = await tx.cariOdeme.create({
             data: {
+                cariMusteriId: siparis.cariId,
                 siparisId: parseInt(siparisId),
-                miktar: parseFloat(miktar),
-                odemeYontemiId: parseInt(odemeYontemiId),
+                tutar: parseFloat(tutar),
+                odemeYontemi: odemeYontemi || 'NAKIT',
                 odemeTarihi: new Date(),
-                aciklama: aciklama || '',
-                referansNo: referansNo || '',
-                durum: 'tamamlandi'
-            }
-        }, 'PAYMENT_CREATED');
+                aciklama: aciklama || ''
+            },
+            select: { id: true, tutar: true, odemeYontemi: true, odemeTarihi: true, aciklama: true }
+        });
 
         // 5. Update order status if fully paid
-        const isFullyPaid = newTotal >= siparis.toplamTutar;
-        if (isFullyPaid && siparis.durum !== 'odeme_tamamlandi') {
-            await tx.secureQuery('siparisFormu', 'update', {
-                where: { id: parseInt(siparisId) },
-                data: {
-                    durum: 'odeme_tamamlandi',
-                    odemeDurumu: 'tamamlandi'
-                }
-            }, 'ORDER_PAYMENT_COMPLETED');
+        const isFullyPaid = newTotal >= (siparis.toplamTutar || 0);
+        if (isFullyPaid) {
+            await tx.siparis.update({ where: { id: parseInt(siparisId) }, data: { odemeDurumu: 'tamamlandi' } });
         }
 
         return {
             payment,
             order: siparis,
-            customer: cariMusteri,
             totalPaid: newTotal,
             isFullyPaid
         };
@@ -207,19 +164,13 @@ async function createPayment(req, res, siparisId) {
         userId: req.user.userId,
         siparisId,
         paymentId: result.payment.id,
-        amount: miktar,
-        paymentMethod: odemeYontemiId,
+        amount: tutar,
+        paymentMethod: odemeYontemi,
         customerCreated: !!result.customer,
         isFullyPaid: result.isFullyPaid
     });
 
-    return res.status(201).json({
-        success: true,
-        message: 'Payment saved successfully',
-        payment: result.payment,
-        totalPaid: result.totalPaid,
-        isFullyPaid: result.isFullyPaid
-    });
+    return res.status(201).json({ success: true, payment: result.payment, totalPaid: result.totalPaid, isFullyPaid: result.isFullyPaid });
 }
 
 /**
@@ -253,7 +204,7 @@ async function updatePayment(req, res, siparisId) {
     if (req.body.durum) updateData.durum = req.body.durum;
 
     // Update with security context
-    const updatedPayment = await req.prisma.secureQuery('odeme', 'update', {
+    const updatedPayment = await prisma.odeme.update({
         where: {
             id: parseInt(paymentId),
             siparisId: parseInt(siparisId) // Ensure payment belongs to this order
@@ -288,9 +239,9 @@ export default secureAPI(
         permission: PERMISSIONS.MANAGE_PAYMENTS,
 
         // Input Validation Configuration
-        allowedFields: ['miktar', 'odemeYontemiId', 'aciklama', 'referansNo', 'paymentId', 'durum'],
+        allowedFields: ['tutar', 'odemeYontemi', 'aciklama', 'referansNo', 'paymentId', 'durum'],
         requiredFields: {
-            POST: ['miktar', 'odemeYontemiId'],
+            POST: ['tutar', 'odemeYontemi'],
             PUT: ['paymentId']
         },
 
