@@ -560,8 +560,7 @@ async function createOrder(req, res) {
                 tip: 'BORC',
                 tutar: finalTotal,
                 aciklama: `Sipariş ${newOrder.siparisNo} borcu`,
-                siparisId: newOrder.id,
-                vadeTarihi: dueDate
+                siparisId: newOrder.id
             }
         });
 
@@ -571,12 +570,11 @@ async function createOrder(req, res) {
                 await tx.stokHareket.create({
                     data: {
                         urunId: kalem.urunId,
-                        hareketTipi: 'REZERVE',
+                        tip: 'CIKIS',
                         miktar: -kalem.miktar,
-                        referansId: newOrder.id,
-                        referansTip: 'SIPARIS',
+                        birim: kalem.birim,
                         aciklama: `Sipariş rezervasyonu: ${siparisNo}`,
-                        createdBy: req.user.userId
+                        createdBy: req.user?.userId || null
                     }
                 });
             }
