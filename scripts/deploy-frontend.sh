@@ -156,3 +156,4 @@ echo ""
 echo "🎉 Frontend deployment completed!"
 echo "📁 Files deployed to: $WEB_ROOT"
 [ ! -z "$DOMAIN" ] && echo "🌐 Domain: http://$DOMAIN"
+

@@ -82,3 +82,4 @@ echo "  pm2 status              # Check backend status"
 echo "  pm2 logs og-backend     # View backend logs"
 echo "  nginx -t                # Test nginx config"
 echo "  systemctl status nginx  # Check nginx status"
+

@@ -18,8 +18,8 @@ cd "$BACKEND_DIR"
 
 # Stop existing PM2 processes
 echo "⏹️  Stopping existing PM2 processes..."
-pm2 stop og-backend || echo "No existing processes to stop"
-pm2 delete og-backend || echo "No existing processes to delete"
+pm2 stop backend || echo "No existing processes to stop"
+pm2 delete backend || echo "No existing processes to delete"
 
 # Install dependencies
 echo "📦 Installing dependencies..."
@@ -94,7 +94,7 @@ else
     echo "📋 PM2 status:"
     pm2 status
     echo "📋 Recent logs:"
-    pm2 logs og-backend --lines 20
+    pm2 logs backend --lines 20
     exit 1
 fi
 
