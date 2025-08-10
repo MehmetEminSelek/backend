@@ -1,0 +1,362 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "message": "Dropdown data retrieved successfully",
+    "data": {
+      "urunler": [
+        {
+          "id": 1,
+          "ad": "Antep Peynirli Su Böreği",
+          "kod": "UR001",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 2,
+          "ad": "Bayram Tepsisi",
+          "kod": "UR002",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 13,
+          "ad": "Bülbül Yuvası",
+          "kod": "UR013",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 12,
+          "ad": "Burma Kadayıf",
+          "kod": "UR012",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 3,
+          "ad": "Cevizli Bülbül Yuvası",
+          "kod": "UR003",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 4,
+          "ad": "Cevizli Eski Usûl Dolama",
+          "kod": "UR004",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 5,
+          "ad": "Cevizli Özel Kare",
+          "kod": "UR005",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 6,
+          "ad": "Cevizli Şöbiyet",
+          "kod": "UR006",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 7,
+          "ad": "Cevizli Yaş Baklava",
+          "kod": "UR007",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 14,
+          "ad": "Çikolatalı Midye",
+          "kod": "UR014",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 8,
+          "ad": "Doğum Günü Tepsisi",
+          "kod": "UR008",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 15,
+          "ad": "Dolama",
+          "kod": "UR015",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 9,
+          "ad": "Düz Kadayıf",
+          "kod": "UR009",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 16,
+          "ad": "Eski Usûl Dolama",
+          "kod": "UR016",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 10,
+          "ad": "Fındıklı Çikolatalı Midye",
+          "kod": "UR010",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 11,
+          "ad": "Fıstık Ezmesi",
+          "kod": "UR011",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 18,
+          "ad": "Fıstıklı Kurabiye",
+          "kod": "UR018",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 17,
+          "ad": "Havuç Dilimi",
+          "kod": "UR017",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 26,
+          "ad": "İç Fıstık",
+          "kod": "UR026",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 27,
+          "ad": "Kare Fıstık Ezmesi",
+          "kod": "UR027",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 28,
+          "ad": "Karışık",
+          "kod": "UR028",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 29,
+          "ad": "Kaymaklı Baklava",
+          "kod": "UR029",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 30,
+          "ad": "Kaymaklı Havuç Dilimi",
+          "kod": "UR030",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 19,
+          "ad": "Kuru Baklava",
+          "kod": "UR019",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 20,
+          "ad": "Midye",
+          "kod": "UR020",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 21,
+          "ad": "Özel Kare",
+          "kod": "UR021",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 31,
+          "ad": "Özel Karışık",
+          "kod": "UR031",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 22,
+          "ad": "Özel Şöbiyet",
+          "kod": "UR022",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 32,
+          "ad": "Sade Kurabiye",
+          "kod": "UR032",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 33,
+          "ad": "Sadeyağ",
+          "kod": "UR033",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 34,
+          "ad": "Sargılı Fıstık Ezmesi",
+          "kod": "UR034",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 23,
+          "ad": "Şöbiyet",
+          "kod": "UR023",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 35,
+          "ad": "Soğuk Baklava",
+          "kod": "UR035",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 36,
+          "ad": "Tuzlu Antep Fıstığı",
+          "kod": "UR036",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 24,
+          "ad": "Yaprak Şöbiyet",
+          "kod": "UR024",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 25,
+          "ad": "Yaş Baklava",
+          "kod": "UR025",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 37,
+          "ad": "Yazılı Karışık Tepsi",
+          "kod": "UR037",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        },
+        {
+          "id": 38,
+          "ad": "Yılbaşı Tepsisi",
+          "kod": "UR038",
+          "kategori": null,
+          "birim": "KG",
+          "aktif": true,
+          "aciklama": null
+        }
+      ]
+    },
+    "hammaddeler": [],
+    "yariMamuller": [],
+    "metadata": {
+      "generatedAt": "2025-08-10T15:25:39.998Z",
+      "userRole": "GENEL_MUDUR",
+      "accessLevel": 100,
+      "category": "urunler",
+      "format": "detailed"
+    }
+  }
+}

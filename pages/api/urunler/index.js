@@ -1,21 +1,16 @@
 /**
- * =============================================
- * SECURED PRODUCTS API - FULL SECURITY INTEGRATION
- * =============================================
+ * Urunler API - SIMPLIFIED
  */
 
+import prisma from '../../../lib/prisma.js';
 import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
-import { createAuditLog } from '../../../lib/audit-logger.js';
-import { prisma } from '../../../lib/prisma.js';
 
-/**
- * Products API Handler with Full Security Integration
- */
-async function productsHandler(req, res) {
-    const { method } = req;
+export default withCorsAndAuth(async function handler(req, res) {
+
+    console.log(`🔍 URUNLER API: ${req.method} request received`);
 
     try {
-        switch (method) {
+        switch (req.method) {
             case 'GET':
                 return await getProducts(req, res);
             case 'POST':
@@ -32,23 +27,17 @@ async function productsHandler(req, res) {
                 });
         }
     } catch (error) {
-        console.error('Products API Error:', error);
-
-        console.error('🚨 PRODUCTS_API_ERROR:', 'Products API operation failed', {
-            userId: req.user?.userId,
-            method,
-            error: error.message
-        });
-
+        console.error('❌ Urunler API Error:', error);
         return res.status(500).json({
-            error: 'Product operation failed',
-            code: 'PRODUCTS_ERROR'
+            error: 'Internal server error',
+            code: 'URUNLER_ERROR',
+            details: error.message
         });
     }
-}
+});
 
 /**
- * Get Products List with Advanced Filtering and Security
+ * Get Products
  */
 async function getProducts(req, res) {
     const {
@@ -56,59 +45,27 @@ async function getProducts(req, res) {
         limit = 50,
         search,
         kategori,
-        aktif,
-        satisaUygun,
-        ozelUrun,
-        yeniUrun,
-        indirimliUrun,
-        minFiyat,
-        maxFiyat,
-        sortBy = 'ad',
-        sortOrder = 'asc'
+        aktif
     } = req.query;
 
-    // Convert to safe numbers
+    console.log('🔍 GET Products - params:', { page, limit, search, kategori, aktif });
+
+    // Basic pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(Math.max(1, parseInt(limit)), 100); // Max 100 per page
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
-    // Build secure where clause
-    const whereClause = {};
+    // Build where clause (exclude soft-deleted)
+    const whereClause = { deletedAt: null };
 
-    // Category filtering
-    if (kategori) {
-        whereClause.kategori = { contains: kategori, mode: 'insensitive' };
-    }
-
-    // Status filtering
+    // Active status filtering
     if (aktif !== undefined) {
         whereClause.aktif = aktif === 'true';
     }
 
-    if (satisaUygun !== undefined) {
-        whereClause.satisaUygun = satisaUygun === 'true';
-    }
-
-    if (ozelUrun !== undefined) {
-        whereClause.ozelUrun = ozelUrun === 'true';
-    }
-
-    if (yeniUrun !== undefined) {
-        whereClause.yeniUrun = yeniUrun === 'true';
-    }
-
-    if (indirimliUrun !== undefined) {
-        whereClause.indirimliUrun = indirimliUrun === 'true';
-    }
-
-    // Price range filtering (only for higher roles)
-    if ((minFiyat || maxFiyat) && req.user.roleLevel >= 60) {
-        whereClause.guncelFiyat = {};
-        if (minFiyat) {
-            whereClause.guncelFiyat.gte = parseFloat(minFiyat);
-        }
-        if (maxFiyat) {
-            whereClause.guncelFiyat.lte = parseFloat(maxFiyat);
-        }
+    // Category filtering
+    if (kategori) {
+        whereClause.kategoriId = parseInt(kategori);
     }
 
     // Search filtering
@@ -116,499 +73,223 @@ async function getProducts(req, res) {
         whereClause.OR = [
             { ad: { contains: search, mode: 'insensitive' } },
             { kod: { contains: search, mode: 'insensitive' } },
-            { aciklama: { contains: search, mode: 'insensitive' } },
-            { kategori: { contains: search, mode: 'insensitive' } }
+            { aciklama: { contains: search, mode: 'insensitive' } }
         ];
     }
 
-    // Pagination and limits (pageNum and limitNum already defined above)
-    const skip = (pageNum - 1) * limitNum;
-
-    // Sorting validation
-    const validSortFields = ['ad', 'kod', 'kategori', 'guncelFiyat', 'olusturmaTarihi'];
-    const validSortOrders = ['asc', 'desc'];
-    const sortField = validSortFields.includes(sortBy) ? sortBy : 'ad';
-    const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'asc';
-
-    // Enhanced query with security context
-    const [products, totalCount] = await Promise.all([
-        prisma.urun.findMany({
-            where: whereClause,
-            select: {
-                id: true,
-                kod: true,
-                ad: true,
-                aciklama: true,
-                kategori: true,
-                birim: true,
-                aktif: true,
-                satisaUygun: true,
-                ozelUrun: true,
-                yeniUrun: true,
-                indirimliUrun: true,
-                olusturmaTarihi: true,
-                guncellemeTarihi: true,
-
-                // Price and cost data only for higher roles
-                ...(req.user.roleLevel >= 60 && {
-                    guncelFiyat: true,
-                    maliyetFiyat: true,
-                    karMarji: true,
-                    minStok: true,
-                    maxStok: true
-                }),
-
-                // Sensitive data only for managers+
-                ...(req.user.roleLevel >= 70 && {
-                    tedarikciKodu: true,
-                    tedarikciAdi: true,
-                    alisFiyati: true
-                }),
-
-                // Stock info for inventory managers
-                ...(req.user.roleLevel >= 60 && {
+    try {
+        const [productsRaw, totalCount] = await Promise.all([
+            prisma.urun.findMany({
+                where: whereClause,
+                select: {
+                    id: true,
+                    ad: true,
+                    kod: true,
+                    kategoriId: true,
+                    kategori: { select: { id: true, ad: true, kod: true } },
+                    aciklama: true,
+                    birim: true,
                     mevcutStok: true,
-                    rezerveStok: true,
-                    stokUyariSeviyesi: true
-                })
-            },
-            orderBy: {
-                [sortField]: sortDirection
-            },
-            skip,
-            take: limitNum
-        }),
-        prisma.urun.count({
-            where: whereClause
-        })
-    ]);
+                    minStokSeviye: true,
+                    maliyetFiyati: true,
+                    karMarji: true,
+                    karOrani: true,
+                    satisaUygun: true,
+                    aktif: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    receteler: { where: { deletedAt: null }, select: { id: true, ad: true, aktif: true } },
+                    fiyatlar: {
+                        where: { aktif: true, deletedAt: null },
+                        orderBy: { baslangicTarihi: 'desc' },
+                        take: 1,
+                        select: {
+                            id: true,
+                            kgFiyati: true,
+                            birim: true,
+                            fiyatTipi: true,
+                            baslangicTarihi: true,
+                            bitisTarihi: true
+                        }
+                    }
+                },
+                orderBy: { ad: 'asc' },
+                skip,
+                take: limitNum
+            }),
+            prisma.urun.count({ where: whereClause })
+        ]);
 
-    // Calculate summary statistics
-    const productsSummary = await prisma.urun.aggregate({
-        where: whereClause,
-        _count: {
-            id: true
-        },
-        ...(req.user.roleLevel >= 60 && {
-            _avg: {
-                guncelFiyat: true
-            },
-            _sum: {
-                mevcutStok: true
+        const products = productsRaw.map(p => ({
+            ...p,
+            guncelFiyat: Array.isArray(p.fiyatlar) && p.fiyatlar.length > 0 ? p.fiyatlar[0] : null,
+            recipeAssigned: Array.isArray(p.receteler) && p.receteler.some(r => r.aktif),
+            recipeCount: Array.isArray(p.receteler) ? p.receteler.length : 0
+        }));
+
+        console.log(`✅ Found ${products.length} products (total: ${totalCount})`);
+
+        return res.status(200).json({
+            success: true,
+            total: totalCount,
+            activeTotal: productsRaw.filter(p => p.aktif).length,
+            products: products,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total: totalCount,
+                pages: Math.ceil(totalCount / limitNum)
             }
-        })
-    });
+        });
 
-    console.log('📊 PRODUCTS_VIEW:', 'Products list accessed', {
-        userId: req.user.userId,
-        totalProducts: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        filters: { search, kategori, aktif, satisaUygun }
-    });
-
-    return res.status(200).json({
-        success: true,
-        products,
-        pagination: {
-            currentPage: pageNum,
-            totalPages: Math.ceil(totalCount / limitNum),
-            totalItems: totalCount,
-            itemsPerPage: limitNum
-        },
-        summary: {
-            totalProducts: productsSummary._count.id,
-            ...(req.user.roleLevel >= 60 && {
-                averagePrice: productsSummary._avg?.guncelFiyat || 0,
-                totalStock: productsSummary._sum?.mevcutStok || 0
-            })
-        }
-    });
+    } catch (error) {
+        console.error('❌ Error fetching products:', error);
+        return res.status(500).json({
+            error: 'Failed to fetch products',
+            details: error.message
+        });
+    }
 }
 
 /**
- * Create New Product with Enhanced Security and Validation
+ * Create Product
  */
 async function createProduct(req, res) {
-    // Permission check
-    if (req.user.roleLevel < 70) {
-        return res.status(403).json({
-            error: 'Insufficient permissions to create products'
-        });
-    }
-
-    // Input validation with security checks
-    const validationResult = validateInput(req.body, {
-        requiredFields: ['kod', 'ad', 'kategori', 'birim'],
-        allowedFields: [
-            'kod', 'ad', 'aciklama', 'kategori', 'birim', 'guncelFiyat',
-            'maliyetFiyat', 'alisFiyati', 'tedarikciKodu', 'tedarikciAdi',
-            'minStok', 'maxStok', 'stokUyariSeviyesi', 'aktif', 'satisaUygun',
-            'ozelUrun', 'yeniUrun', 'indirimliUrun', 'notlar'
-        ],
-        requireSanitization: true
-    });
-
-    if (!validationResult.isValid) {
-        return res.status(400).json({
-            error: 'Invalid product data',
-            details: validationResult.errors
-        });
-    }
+    console.log('🔍 POST Create Product:', req.body);
 
     const {
-        kod, ad, aciklama, kategori, birim, guncelFiyat = 0, maliyetFiyat = 0,
-        alisFiyati = 0, tedarikciKodu, tedarikciAdi, minStok = 0, maxStok = 0,
-        stokUyariSeviyesi = 0, aktif = true, satisaUygun = true, ozelUrun = false,
-        yeniUrun = false, indirimliUrun = false, notlar
+        ad,
+        kod,
+        kategoriId,
+        aciklama,
+        birim,
+        minStokSeviye,
+        satisaUygun
     } = req.body;
 
-    // Business logic validation
-    if (kod.length < 2) {
+    // Basic validation
+    if (!ad || !kod) {
         return res.status(400).json({
-            error: 'Product code must be at least 2 characters long'
+            error: 'ad and kod are required'
         });
     }
 
-    if (ad.length < 2) {
-        return res.status(400).json({
-            error: 'Product name must be at least 2 characters long'
-        });
-    }
+    try {
+        // Map birim to enum SatisBirimi
+        const unitMap = { 'KG': 'KG', 'KILO': 'KG', 'KİLO': 'KG', 'GRAM': 'GRAM', 'GR': 'GRAM', 'G': 'GRAM', 'ADET': 'ADET', 'AD': 'ADET' };
+        const normalizedBirim = (birim || 'KG').toString().toUpperCase('tr-TR');
+        const birimEnum = unitMap[normalizedBirim] || 'KG';
 
-    // Price validation
-    if (guncelFiyat < 0 || maliyetFiyat < 0 || alisFiyati < 0) {
-        return res.status(400).json({
-            error: 'Prices cannot be negative'
-        });
-    }
-
-    // Stock validation
-    if (minStok < 0 || maxStok < 0 || stokUyariSeviyesi < 0) {
-        return res.status(400).json({
-            error: 'Stock values cannot be negative'
-        });
-    }
-
-    if (maxStok > 0 && minStok > maxStok) {
-        return res.status(400).json({
-            error: 'Minimum stock cannot be greater than maximum stock'
-        });
-    }
-
-    // Enhanced transaction for product creation
-    const result = await prisma.$transaction(async (tx) => {
-        // Check for existing product by code
-        const existingProduct = await tx.urun.findFirst({
-            where: {
-                kod: { equals: kod, mode: 'insensitive' }
-            }
-        });
-
-        if (existingProduct) {
-            throw new Error('Product with this code already exists');
-        }
-
-        // Calculate profit margin
-        const karMarji = guncelFiyat > 0 && maliyetFiyat > 0
-            ? ((guncelFiyat - maliyetFiyat) / guncelFiyat) * 100
-            : 0;
-
-        // Create product with audit trail
-        const newProduct = await tx.urun.create({
+        const newProduct = await prisma.urun.create({
             data: {
-                kod: kod.toUpperCase(),
                 ad,
-                aciklama: aciklama || '',
-                kategori,
-                birim,
-                guncelFiyat: parseFloat(guncelFiyat),
-                maliyetFiyat: parseFloat(maliyetFiyat),
-                alisFiyati: parseFloat(alisFiyati),
-                karMarji,
-                tedarikciKodu: tedarikciKodu || '',
-                tedarikciAdi: tedarikciAdi || '',
-                minStok: parseInt(minStok),
-                maxStok: parseInt(maxStok),
-                stokUyariSeviyesi: parseInt(stokUyariSeviyesi),
-                mevcutStok: 0, // Initial stock is 0
-                rezerveStok: 0,
-                aktif,
-                satisaUygun,
-                ozelUrun,
-                yeniUrun,
-                indirimliUrun,
-                notlar: notlar || '',
-                olusturmaTarihi: new Date(),
-                olusturanKullanici: req.user.userId
-            },
-            select: {
-                id: true,
-                kod: true,
-                ad: true,
-                kategori: true,
-                birim: true,
-                guncelFiyat: true,
-                aktif: true,
-                olusturmaTarihi: true
+                kod: kod.toUpperCase(),
+                kategoriId: kategoriId ? parseInt(kategoriId) : null,
+                aciklama: aciklama || null,
+                birim: birimEnum,
+                minStokSeviye: minStokSeviye ? parseFloat(minStokSeviye) : 0,
+                satisaUygun: satisaUygun !== undefined ? !!satisaUygun : true,
+                aktif: true
             }
-        }, 'PRODUCT_CREATED');
+        });
 
-        return newProduct;
-    });
+        console.log(`✅ Product created: ${newProduct.id}`);
 
-    // Enhanced audit logging
-    console.log('✅ PRODUCT_CREATED:', 'New product created', {
-        userId: req.user.userId,
-        productId: result.id,
-        productCode: result.kod,
-        productName: result.ad,
-        category: kategori,
-        price: guncelFiyat
-    });
+        return res.status(201).json({
+            success: true,
+            message: 'Product created successfully',
+            product: newProduct
+        });
 
-    return res.status(201).json({
-        success: true,
-        message: 'Product created successfully',
-        product: result
-    });
+    } catch (error) {
+        console.error('❌ Error creating product:', error);
+        return res.status(500).json({
+            error: 'Failed to create product',
+            details: error.message
+        });
+    }
 }
 
 /**
- * Update Product with Enhanced Security and Validation
+ * Update Product
  */
 async function updateProduct(req, res) {
-    // Permission check
-    if (req.user.roleLevel < 60) {
-        return res.status(403).json({
-            error: 'Insufficient permissions to update products'
-        });
-    }
+    console.log('🔍 PUT Update Product:', req.body);
 
-    // Input validation
-    const validationResult = validateInput(req.body, {
-        requiredFields: ['id'],
-        allowedFields: [
-            'id', 'kod', 'ad', 'aciklama', 'kategori', 'birim', 'guncelFiyat',
-            'maliyetFiyat', 'alisFiyati', 'tedarikciKodu', 'tedarikciAdi',
-            'minStok', 'maxStok', 'stokUyariSeviyesi', 'aktif', 'satisaUygun',
-            'ozelUrun', 'yeniUrun', 'indirimliUrun', 'notlar'
-        ],
-        requireSanitization: true
-    });
+    const { id, kategoriId, kategori, ...updateData } = req.body;
 
-    if (!validationResult.isValid) {
-        return res.status(400).json({
-            error: 'Invalid update data',
-            details: validationResult.errors
-        });
-    }
-
-    const { id: productId, ...updateFields } = req.body;
-
-    // Get current product for comparison
-    const currentProduct = await prisma.urun.findUnique({
-        where: { id: parseInt(productId) },
-        select: {
-            id: true,
-            kod: true,
-            ad: true,
-            guncelFiyat: true,
-            maliyetFiyat: true,
-            aktif: true
-        }
-    });
-
-    if (!currentProduct) {
-        return res.status(404).json({
-            error: 'Product not found'
-        });
-    }
-
-    // Price update permission check
-    if ((updateFields.guncelFiyat !== undefined || updateFields.maliyetFiyat !== undefined)
-        && req.user.roleLevel < 70) {
-        return res.status(403).json({
-            error: 'Insufficient permissions to update product prices'
-        });
-    }
-
-    // Prepare update data
-    const updateData = {};
-    const changeLog = [];
-
-    const allowedFields = [
-        'kod', 'ad', 'aciklama', 'kategori', 'birim', 'tedarikciKodu', 'tedarikciAdi',
-        'minStok', 'maxStok', 'stokUyariSeviyesi', 'aktif', 'satisaUygun',
-        'ozelUrun', 'yeniUrun', 'indirimliUrun', 'notlar'
-    ];
-
-    for (const field of allowedFields) {
-        if (updateFields[field] !== undefined) {
-            updateData[field] = updateFields[field];
-            changeLog.push(`${field} updated`);
-        }
-    }
-
-    // Price updates with margin recalculation
-    if (updateFields.guncelFiyat !== undefined || updateFields.maliyetFiyat !== undefined) {
-        const newGuncelFiyat = parseFloat(updateFields.guncelFiyat || currentProduct.guncelFiyat);
-        const newMaliyetFiyat = parseFloat(updateFields.maliyetFiyat || currentProduct.maliyetFiyat);
-
-        updateData.guncelFiyat = newGuncelFiyat;
-        updateData.maliyetFiyat = newMaliyetFiyat;
-
-        // Recalculate profit margin
-        updateData.karMarji = newGuncelFiyat > 0 && newMaliyetFiyat > 0
-            ? ((newGuncelFiyat - newMaliyetFiyat) / newGuncelFiyat) * 100
-            : 0;
-
-        changeLog.push('prices and margin updated');
-    }
-
-    if (Object.keys(updateData).length === 0) {
-        return res.status(400).json({
-            error: 'No valid updates provided'
-        });
-    }
-
-    // Update with transaction
-    const result = await prisma.$transaction(async (tx) => {
-        // Check for code uniqueness if code is being updated
-        if (updateData.kod && updateData.kod !== currentProduct.kod) {
-            const existingProduct = await tx.urun.findFirst({
-                where: {
-                    kod: { equals: updateData.kod, mode: 'insensitive' },
-                    id: { not: parseInt(productId) }
-                }
-            });
-
-            if (existingProduct) {
-                throw new Error('Product with this code already exists');
-            }
-        }
-
-        const updatedProduct = await tx.urun.update({
-            where: { id: parseInt(productId) },
-            data: {
-                ...updateData,
-                guncellemeTarihi: new Date(),
-                guncelleyenKullanici: req.user.userId
-            },
-            select: {
-                id: true,
-                kod: true,
-                ad: true,
-                kategori: true,
-                guncelFiyat: true,
-                aktif: true,
-                guncellemeTarihi: true
-            }
-        }, 'PRODUCT_UPDATED');
-
-        return updatedProduct;
-    });
-
-    // Enhanced audit logging
-    console.log('🔄 PRODUCT_UPDATED:', 'Product updated', {
-        userId: req.user.userId,
-        productId: parseInt(productId),
-        productCode: result.kod,
-        productName: result.ad,
-        changes: changeLog,
-        userRole: req.user.rol
-    });
-
-    return res.status(200).json({
-        success: true,
-        message: 'Product updated successfully',
-        product: result,
-        changes: changeLog
-    });
-}
-
-/**
- * Delete Product with Enhanced Security
- */
-async function deleteProduct(req, res) {
-    // Permission check - Only admins can delete products
-    if (req.user.roleLevel < 80) {
-        return res.status(403).json({
-            error: 'Insufficient permissions to delete products'
-        });
-    }
-
-    const { id: productId } = req.body;
-
-    if (!productId) {
+    if (!id) {
         return res.status(400).json({
             error: 'Product ID is required'
         });
     }
 
-    // Get product details for validation
-    const productToDelete = await prisma.urun.findUnique({
-        where: { id: parseInt(productId) },
-        select: {
-            id: true,
-            kod: true,
-            ad: true,
-            aktif: true,
-            mevcutStok: true
-        }
-    });
-
-    if (!productToDelete) {
-        return res.status(404).json({
-            error: 'Product not found'
-        });
+    // Map kategori -> kategoriId if provided
+    if (!kategoriId && kategori) {
+        updateData.kategoriId = parseInt(kategori);
+    } else if (kategoriId) {
+        updateData.kategoriId = parseInt(kategoriId);
     }
 
-    // Business rule checks
-    if (productToDelete.mevcutStok > 0) {
-        return res.status(400).json({
-            error: 'Cannot delete products with existing stock'
+    try {
+        const updatedProduct = await prisma.urun.update({
+            where: { id: parseInt(id) },
+            data: updateData
+        });
+
+        console.log(`✅ Product updated: ${updatedProduct.id}`);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Product updated successfully',
+            product: updatedProduct
+        });
+
+    } catch (error) {
+        console.error('❌ Error updating product:', error);
+        return res.status(500).json({
+            error: 'Failed to update product',
+            details: error.message
         });
     }
-
-    // Check if product is used in any orders (simplified check)
-    const orderUsage = await prisma.siparisKalemi.count({
-        where: { urunId: parseInt(productId) }
-    });
-
-    if (orderUsage > 0) {
-        return res.status(400).json({
-            error: 'Cannot delete products that have been used in orders. Consider deactivating instead.'
-        });
-    }
-
-    // Soft delete (deactivate) instead of hard delete
-    const result = await prisma.$transaction(async (tx) => {
-        const deactivatedProduct = await tx.urun.update({
-            where: { id: parseInt(productId) },
-            data: {
-                aktif: false,
-                silinmeTarihi: new Date(),
-                silenKullanici: req.user.userId,
-                silmeSebebi: 'Yönetici silme işlemi'
-            }
-        }, 'PRODUCT_DEACTIVATED');
-
-        return deactivatedProduct;
-    });
-
-    console.log('🗑️ PRODUCT_DELETED:', 'Product deleted (soft delete)', {
-        userId: req.user.userId,
-        productId: parseInt(productId),
-        productCode: productToDelete.kod,
-        productName: productToDelete.ad
-    });
-
-    return res.status(200).json({
-        success: true,
-        message: 'Product deactivated successfully'
-    });
 }
 
-// ===== SECURITY INTEGRATION =====
-export default withCorsAndAuth(productsHandler); 
+/**
+ * Delete Product
+ */
+async function deleteProduct(req, res) {
+    const { id } = req.body;
+
+    if (!id) {
+        return res.status(400).json({
+            error: 'Product ID is required'
+        });
+    }
+
+    try {
+        // Soft delete: mark deleted fields
+        await prisma.urun.update({
+            where: { id: parseInt(id) },
+            data: {
+                aktif: false,
+                deletedAt: new Date(),
+                deletedBy: String(req.user?.personelId || req.user?.id || req.user?.userId || ''),
+                deleteReason: 'Yönetici silme işlemi'
+            }
+        });
+
+        console.log(`✅ Product deleted: ${id}`);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Product deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('❌ Error deleting product:', error);
+        return res.status(500).json({
+            error: 'Failed to delete product',
+            details: error.message
+        });
+    }
+}

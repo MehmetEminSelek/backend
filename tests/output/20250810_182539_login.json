@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "message": "Giriş başarılı",
+    "user": {
+      "id": 9,
+      "ad": "Degismez",
+      "email": null,
+      "rol": "GENEL_MUDUR",
+      "roleLevel": 100,
+      "personelId": "P009",
+      "username": "baris.gullu"
+    },
+    "accessToken": "***REDACTED***",
+    "refreshToken": "***REDACTED***",
+    "sessionExpiry": "2025-08-11T15:25:39.962Z",
+    "csrfToken": "2a2025e08588a59616457d2a120ff401f307dd5fa8e569756ceda23309a6d5cd",
+    "stokUyarilari": null
+  }
+}

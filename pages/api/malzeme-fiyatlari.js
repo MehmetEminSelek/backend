@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../lib/rbac-enhanced.js';
 import { auditLog } from '../../lib/audit-logger.js';
 import { validateInput } from '../../lib/validation.js';
+import prisma from '../../lib/prisma.js';
 
 /**
  * Material Pricing API Handler with Full Security Integration
@@ -110,18 +111,10 @@ async function getMaterialPricing(req, res) {
                 updatedAt: true,
 
                 // Price data only for authorized users
-                ...(req.user.roleLevel >= 60 && {
-                    birimFiyat: true,
-                    sonAlisFiyati: true,
-                    ortalamaMaliyet: true
-                }),
+                ...(req.user.roleLevel >= 60 && { birimFiyat: true }),
 
                 // Sensitive supplier data only for managers+
-                ...(req.user.roleLevel >= 70 && {
-                    tedarikci: true,
-                    tedarikciKodu: true,
-                    minSiparisMiktari: true
-                })
+                ...(req.user.roleLevel >= 70 && { tedarikci: true })
             }
         });
 
@@ -149,18 +142,12 @@ async function getMaterialPricing(req, res) {
                 tipi: material.tipi,
                 birim: material.birim,
                 fiyat: material.birimFiyat || 0,
-                sonAlisFiyati: material.sonAlisFiyati || 0,
-                ortalamaMaliyet: material.ortalamaMaliyet || 0,
                 mevcutStok: material.mevcutStok,
                 minStokSeviye: material.minStokSeviye,
                 kritikSeviye: material.kritikSeviye,
                 aciklama: material.aciklama,
                 aktif: material.aktif,
-                ...(req.user.roleLevel >= 70 && {
-                    tedarikci: material.tedarikci,
-                    tedarikciKodu: material.tedarikciKodu,
-                    minSiparisMiktari: material.minSiparisMiktari
-                })
+                ...(req.user.roleLevel >= 70 && { tedarikci: material.tedarikci })
             }
         });
     }
@@ -227,17 +214,10 @@ async function getMaterialPricing(req, res) {
                 updatedAt: true,
 
                 // Price data only for authorized users
-                ...(req.user.roleLevel >= 60 && {
-                    birimFiyat: true,
-                    sonAlisFiyati: true,
-                    ortalamaMaliyet: true
-                }),
+                ...(req.user.roleLevel >= 60 && { birimFiyat: true }),
 
                 // Sensitive supplier data only for managers+
-                ...(req.user.roleLevel >= 70 && {
-                    tedarikci: true,
-                    tedarikciKodu: true
-                })
+                ...(req.user.roleLevel >= 70 && { tedarikci: true })
             },
             orderBy: {
                 [sortField]: sortDirection
@@ -254,17 +234,9 @@ async function getMaterialPricing(req, res) {
     const pricingStats = req.user.roleLevel >= 70 ? await prisma.material.aggregate({
         where: { ...whereClause, birimFiyat: { gt: 0 } },
         _count: { id: true },
-        _avg: {
-            birimFiyat: true,
-            sonAlisFiyati: true,
-            ortalamaMaliyet: true
-        },
-        _min: {
-            birimFiyat: true
-        },
-        _max: {
-            birimFiyat: true
-        }
+        _avg: { birimFiyat: true },
+        _min: { birimFiyat: true },
+        _max: { birimFiyat: true }
     }) : null;
 
     auditLog('MATERIAL_PRICING_VIEW_LIST', 'Material pricing list accessed', {
@@ -289,8 +261,6 @@ async function getMaterialPricing(req, res) {
             pricingStatistics: {
                 totalMaterialsWithPricing: pricingStats._count.id,
                 averagePrice: pricingStats._avg?.birimFiyat || 0,
-                averagePurchasePrice: pricingStats._avg?.sonAlisFiyati || 0,
-                averageCost: pricingStats._avg?.ortalamaMaliyet || 0,
                 priceRange: {
                     min: pricingStats._min?.birimFiyat || 0,
                     max: pricingStats._max?.birimFiyat || 0

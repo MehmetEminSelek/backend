@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "user": {
+      "id": 9,
+      "personelId": "P009",
+      "ad": "Degismez",
+      "soyad": "GÜLLÜ",
+      "email": null,
+      "username": "baris.gullu",
+      "rol": "GENEL_MUDUR",
+      "telefon": null,
+      "aktif": true,
+      "sube": null,
+      "createdAt": "2025-08-10T13:50:48.260Z",
+      "updatedAt": "2025-08-10T15:25:39.954Z"
+    }
+  }
+}

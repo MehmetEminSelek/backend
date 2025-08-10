@@ -34,11 +34,13 @@ async function ordersHandler(req, res) {
                 return await getOrders(req, res);
             case 'POST':
                 return await createOrder(req, res);
+            case 'PUT':
+                return await updateOrder(req, res);
             default:
-                res.setHeader('Allow', ['GET', 'POST']);
+                res.setHeader('Allow', ['GET', 'POST', 'PUT']);
                 return res.status(405).json({
                     error: 'Method not allowed',
-                    allowed: ['GET', 'POST']
+                    allowed: ['GET', 'POST', 'PUT']
                 });
         }
     } catch (error) {
@@ -156,6 +158,15 @@ async function getOrders(req, res) {
                 gonderenTel: true,
                 gonderenEmail: true,
                 teslimatAdresi: true,
+                il: true,
+                ilce: true,
+                postaKodu: true,
+                teslimTarihi: true,
+                teslimSaati: true,
+                kargoDurumu: true,
+                kargoSirketi: true,
+                kargoTakipNo: true,
+                kargoNotu: true,
                 siparisNotu: true,
                 createdAt: true,
                 // Include related data based on user permissions
@@ -171,12 +182,25 @@ async function getOrders(req, res) {
                         musteriKodu: true
                     }
                 },
+                teslimatTuru: {
+                    select: {
+                        id: true,
+                        ad: true,
+                        kod: true
+                    }
+                },
                 sube: {
                     select: {
                         id: true,
                         ad: true,
                         kod: true
                     }
+                },
+                subeNereden: {
+                    select: { id: true, ad: true }
+                },
+                subeNereye: {
+                    select: { id: true, ad: true }
                 },
                 kalemler: {
                     select: {
@@ -213,7 +237,7 @@ async function getOrders(req, res) {
                     odemeler: {
                         select: {
                             id: true,
-                            miktar: true,
+                            tutar: true,
                             odemeTarihi: true,
                             odemeYontemi: true
                         }
@@ -526,7 +550,22 @@ async function createOrder(req, res) {
             });
         }
 
-        // 6. Stock reservation (if enabled)
+        // 6. Create AR movement (BORC) with due date = end of month of order date
+        const orderDate = newOrder.tarih || new Date();
+        const dueDate = new Date(orderDate.getFullYear(), orderDate.getMonth() + 1, 0);
+        dueDate.setHours(23, 59, 59, 999);
+        await tx.cariHareket.create({
+            data: {
+                cariMusteriId: musteri.id,
+                tip: 'BORC',
+                tutar: finalTotal,
+                aciklama: `Sipariş ${newOrder.siparisNo} borcu`,
+                siparisId: newOrder.id,
+                vadeTarihi: dueDate
+            }
+        });
+
+        // 7. Stock reservation (if enabled)
         if (process.env.AUTO_STOCK_RESERVATION === 'true') {
             for (const kalem of processedKalemler) {
                 await tx.stokHareket.create({
@@ -602,6 +641,107 @@ async function createOrder(req, res) {
             telefon: result.customer.telefon
         }
     });
+}
+
+/**
+ * Update Order (status and basic fields)
+ */
+async function updateOrder(req, res) {
+    const {
+        id,
+        durum,
+        kargoDurumu,
+        odemeDurumu,
+        teslimTarihi,
+        teslimSaati,
+        siparisNotu,
+        ozelTalepler,
+        indirimTutari,
+        indirimSebebi,
+        subeId
+    } = req.body || {};
+
+    if (!id) {
+        return res.status(400).json({ error: 'Order id is required' });
+    }
+
+    // Permission: basic updates for roleLevel >= 50
+    if (!req.user || (req.user.roleLevel ?? 0) < 50) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    const updateData = {};
+
+    // Map and validate enums
+    const validDurumlar = ['ONAY_BEKLEYEN', 'HAZIRLLANACAK', 'HAZIRLANDI', 'IPTAL'];
+    if (typeof durum === 'string') {
+        const d = durum.toUpperCase();
+        if (validDurumlar.includes(d)) updateData.durum = d;
+    }
+
+    const validKargo = ['KARGOYA_VERILECEK', 'KARGODA', 'TESLIM_EDILDI', 'SUBEYE_GONDERILECEK', 'SUBEDE_TESLIM', 'ADRESE_TESLIMAT', 'SUBEDEN_SUBEYE', 'IPTAL'];
+    if (typeof kargoDurumu === 'string') {
+        const k = kargoDurumu.toUpperCase();
+        if (validKargo.includes(k)) updateData.kargoDurumu = k;
+    }
+
+    const validOdeme = ['bekliyor', 'kismi', 'tamamlandi', 'iptal'];
+    if (typeof odemeDurumu === 'string' && validOdeme.includes(odemeDurumu)) {
+        updateData.odemeDurumu = odemeDurumu;
+    }
+
+    if (teslimTarihi) {
+        const t = new Date(teslimTarihi);
+        if (!isNaN(t.getTime())) updateData.teslimTarihi = t;
+    }
+    if (typeof teslimSaati === 'string') updateData.teslimSaati = teslimSaati;
+    if (typeof siparisNotu === 'string') updateData.siparisNotu = siparisNotu;
+    if (typeof ozelTalepler === 'string') updateData.ozelTalepler = ozelTalepler;
+
+    // Discount rules: require manager+
+    if (indirimTutari !== undefined) {
+        if ((req.user.roleLevel ?? 0) < 70) {
+            return res.status(403).json({ error: 'Insufficient permissions to update discount' });
+        }
+        const tutar = parseFloat(indirimTutari);
+        if (!Number.isFinite(tutar) || tutar < 0) {
+            return res.status(400).json({ error: 'Invalid indirimTutari' });
+        }
+        updateData.indirimTutari = tutar;
+        updateData.indirimSebebi = typeof indirimSebebi === 'string' ? indirimSebebi : null;
+    }
+
+    if (subeId !== undefined) {
+        const sid = parseInt(subeId);
+        if (Number.isInteger(sid)) updateData.subeId = sid;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const updated = await prisma.siparis.update({
+        where: { id: parseInt(id) },
+        data: updateData,
+        select: {
+            id: true,
+            siparisNo: true,
+            tarih: true,
+            durum: true,
+            kargoDurumu: true,
+            odemeDurumu: true,
+            teslimTarihi: true,
+            teslimSaati: true,
+            siparisNotu: true,
+            ozelTalepler: true,
+            indirimTutari: true,
+            indirimSebebi: true,
+            subeId: true,
+            updatedAt: true
+        }
+    });
+
+    return res.status(200).json({ success: true, order: updated });
 }
 
 // ===== SECURITY INTEGRATION =====

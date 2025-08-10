@@ -206,6 +206,11 @@ model Urun {
   lastModifiedAt       DateTime? // Son değişiklik tarihi
   lastAction           String? // Son yapılan işlem ("FİYAT_GÜNCELLENDİ", "STK_DEĞİŞTİ", vb.)
 
+  // Soft delete metadata
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+
   @@index([kategoriId])
   @@index([kod])
   @@index([aktif])
@@ -255,6 +260,11 @@ model UrunFiyat {
   degisiklikSebebi String?   // "GENEL ZAM", "MALZEME ZAMMI", "KAMPANYA" vb.
   eskiFiyat        Float?    // Önceki fiyat (karşılaştırma için)
   yuzdelik         Float?    // Değişim yüzdesi
+
+  // Soft delete metadata
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
 
   @@unique([urunId, baslangicTarihi, fiyatTipi])
   @@index([aktif])
@@ -800,6 +810,11 @@ model Recipe {
   lastModifiedPersonel User?     @relation("RecipeLastModifiedBy", fields: [lastModifiedBy], references: [personelId])
   lastModifiedAt       DateTime? // Son değişiklik tarihi
   lastAction           String? // Son yapılan işlem ("REÇETE_GÜNCELLENDİ", "MALİYET_HESAPLANDI", vb.)
+
+  // Soft delete metadata
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
 
   @@unique([urunId, versiyon])
   @@index([aktif])

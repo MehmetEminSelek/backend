@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "message": "Recipe cost analysis retrieved successfully",
+    "data": {
+      "recipe": {
+        "id": 8,
+        "name": "BULBUL YUVASI (UR)",
+        "portion": 1,
+        "storedTotalCost": 0,
+        "storedUnitCost": 0,
+        "lastUpdated": "2025-08-10T13:53:57.225Z",
+        "product": null
+      },
+      "currentCostBreakdown": null,
+      "marginAnalysis": null,
+      "historicalCosts": null
+    },
+    "metadata": {
+      "generatedAt": "2025-08-10T15:25:40.463Z",
+      "userRole": "super_admin"
+    }
+  }
+}

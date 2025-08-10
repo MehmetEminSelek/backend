@@ -13,9 +13,9 @@ const { seedSubeOperasyonBirimleri } = require('./seed-sube-operasyon.cjs');
 const { seedHammadeYariMamuller } = require('./seed-hammadde-yari-mamuller.cjs');
 const { seedGuncelUrunFiyatlari } = require('./seed-urun-ve-fiyatlar.cjs');
 const { seedReceteler } = require('./seed-receteler.cjs');
+
 const { seedSiparisDropdownListeleri } = require('./seed-teslimat-turu.cjs');
 const { seedCariMusteriler } = require('./seed-cari-musteriler.cjs');
-// const { seedStokBaslangic } = require('./seed-stok-baslangic');
 
 async function main() {
     console.log('🚀 Ömer Güllü Sistemi - Toplu Seed İşlemi Başlatılıyor...\n');
@@ -41,13 +41,8 @@ async function main() {
         console.log('\n4️⃣ Müşteri verileri yükleniyor...');
         await seedCariMusteriler();
 
-        // 5. Stok verileri - GEÇİCİ OLARAK DEVRE DIŞI
-        // console.log('\n5️⃣ Stok verileri yükleniyor...');
-        // await seedStokBaslangic();
-
         console.log('\n🎉 TÜM SEED İŞLEMLERİ BAŞARIYLA TAMAMLANDI!');
         console.log('📊 Sistem kullanıma hazır.');
-        console.log('\n⚠️  NOT: Stok verileri manuel olarak yüklenmelidir!');
 
     } catch (error) {
         console.error('\n❌ Seed işlemi sırasında hata oluştu:', error);

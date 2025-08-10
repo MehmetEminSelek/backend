@@ -1,181 +1,171 @@
-import prisma from '../../../../lib/prisma.js';
-// import { verifyAuth } from '../../../../lib/auth'; // GELİŞTİRME İÇİN GEÇİCİ OLARAK KAPALI
+import prisma from '../../../../lib/prisma.js'
+import { secureAPI } from '../../../../lib/api-security.js'
+import { withPrismaSecurity } from '../../../../lib/prisma-security.js'
+import { PERMISSIONS } from '../../../../lib/rbac-enhanced.js'
+import { auditLog } from '../../../../lib/audit-logger.js'
 
-export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+const VALID_TR_ROLES = [
+    'GENEL_MUDUR',
+    'SUBE_MUDURU',
+    'URETIM_MUDURU',
+    'SEVKIYAT_MUDURU',
+    'CEP_DEPO_MUDURU',
+    'SUBE_PERSONELI',
+    'URETIM_PERSONEL',
+    'SEVKIYAT_PERSONELI',
+    'SOFOR',
+    'PERSONEL'
+]
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+async function handler(req, res) {
+    const idParam = req.query.id
+    const userId = parseInt(idParam)
+
+    if (!userId || Number.isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user id' })
     }
 
-    const { id } = req.query;
-
-    if (!id) {
-        return res.status(400).json({ message: 'Personel ID zorunludur.' });
-    }
-
-    // DELETE - Personel sil
-    if (req.method === 'DELETE') {
-        try {
-            // Auth kontrolü - GELİŞTİRME İÇİN GEÇİCİ OLARAK KAPALI
-            // let currentUser;
-            // try {
-            //     currentUser = verifyAuth(req);
-            //     if (!['GENEL_MUDUR'].includes(currentUser.rol)) {
-            //         return res.status(403).json({ message: 'Personel silme yetkiniz yok.' });
-            //     }
-            // } catch (e) {
-            //     return res.status(401).json({ message: 'Yetkisiz erişim.' });
-            // }
-
-            // Personeli sil
-            await prisma.user.delete({
-                where: { id: parseInt(id) }
-            });
-
-            return res.status(200).json({ message: 'Personel başarıyla silindi.' });
-        } catch (error) {
-            console.error('Personel DELETE hatası:', error);
-            if (error.code === 'P2025') {
-                return res.status(404).json({ message: 'Personel bulunamadı.' });
-            }
-            return res.status(500).json({
-                message: 'Personel silinirken hata oluştu.',
-                error: error.message
-            });
+    try {
+        switch (req.method) {
+            case 'GET':
+                return await getUser(req, res, userId)
+            case 'PUT':
+                return await updateUser(req, res, userId)
+            case 'DELETE':
+                return await deleteUser(req, res, userId)
+            default:
+                res.setHeader('Allow', ['GET', 'PUT', 'DELETE'])
+                return res.status(405).json({ error: 'Method not allowed' })
         }
+    } catch (error) {
+        console.error('Users [id] API Error:', error)
+        return res.status(500).json({ error: 'Users operation failed', code: 'USERS_ID_ERROR' })
     }
+}
 
-    // PUT - Personel güncelle  
-    if (req.method === 'PUT') {
-        try {
-            // Auth kontrolü - GELİŞTİRME İÇİN GEÇİCİ OLARAK KAPALI
-            // let currentUser;
-            // try {
-            //     currentUser = verifyAuth(req);
-            //     if (!['GENEL_MUDUR', 'SUBE_MUDURU'].includes(currentUser.rol)) {
-            //         return res.status(403).json({ message: 'Personel güncelleme yetkiniz yok.' });
-            //     }
-            // } catch (e) {
-            //     return res.status(401).json({ message: 'Yetkisiz erişim.' });
-            // }
-
-            const {
-                ad,
-                soyad,
-                email,
-                username,
-                password,
-                rol,
-                telefon,
-                subeId,
-                bolum,
-                unvan,
-                iseBaslamaTarihi,
-                gunlukUcret,
-                sgkDurumu,
-                aktif
-            } = req.body;
-
-            // Güncellenecek veriyi hazırla
-            const updateData = {
-                ad,
-                soyad,
-                email,
-                username,
-                rol,
-                telefon,
-                subeId: subeId ? parseInt(subeId) : null,
-                bolum,
-                unvan,
-                iseBaslamaTarihi: iseBaslamaTarihi ? new Date(iseBaslamaTarihi) : null,
-                gunlukUcret: gunlukUcret ? parseFloat(gunlukUcret) : 0,
-                sgkDurumu: sgkDurumu || 'VAR',
-                aktif: aktif !== undefined ? aktif : true,
-                updatedBy: 1 // Geçici olarak admin user ID
-            };
-
-            // Giriş yılını güncelle
-            if (iseBaslamaTarihi) {
-                updateData.girisYili = new Date(iseBaslamaTarihi).getFullYear();
-            }
-
-            // Eğer şifre verilmişse hash'le
-            if (password && password.trim() !== '') {
-                const bcrypt = require('bcrypt');
-                updateData.passwordHash = await bcrypt.hash(password, 12);
-            }
-
-            // Email uniqueness kontrolü (kendi kaydı hariç)
-            if (email) {
-                const existingEmail = await prisma.user.findFirst({
-                    where: {
-                        email,
-                        id: { not: parseInt(id) }
-                    }
-                });
-                if (existingEmail) {
-                    return res.status(400).json({
-                        message: 'Bu email adresi zaten kullanımda.'
-                    });
-                }
-            }
-
-            // Username uniqueness kontrolü (kendi kaydı hariç)
-            if (username) {
-                const existingUsername = await prisma.user.findFirst({
-                    where: {
-                        username,
-                        id: { not: parseInt(id) }
-                    }
-                });
-                if (existingUsername) {
-                    return res.status(400).json({
-                        message: 'Bu kullanıcı adı zaten kullanımda.'
-                    });
-                }
-            }
-
-            const updatedUser = await prisma.user.update({
-                where: { id: parseInt(id) },
-                data: updateData,
-                select: {
-                    id: true,
-                    ad: true,
-                    soyad: true,
-                    email: true,
-                    username: true,
-                    rol: true,
-                    telefon: true,
-                    aktif: true,
-                    subeId: true,
-                    sube: {
-                        select: { ad: true, kod: true }
-                    },
-                    bolum: true,
-                    unvan: true,
-                    iseBaslamaTarihi: true,
-                    gunlukUcret: true,
-                    sgkDurumu: true,
-                    girisYili: true,
-                    updatedAt: true
-                }
-            });
-
-            return res.status(200).json(updatedUser);
-        } catch (error) {
-            console.error('Personel PUT hatası:', error);
-            if (error.code === 'P2025') {
-                return res.status(404).json({ message: 'Personel bulunamadı.' });
-            }
-            return res.status(500).json({
-                message: 'Personel güncellenirken hata oluştu.',
-                error: error.message
-            });
+async function getUser(req, res, userId) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+            id: true,
+            personelId: true,
+            ad: true,
+            soyad: true,
+            email: true,
+            username: true,
+            rol: true,
+            telefon: true,
+            aktif: true,
+            sube: { select: { id: true, ad: true, kod: true } },
+            createdAt: true,
+            updatedAt: true
         }
+    })
+
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' })
     }
 
-    return res.status(405).json({ message: 'İzin verilmeyen HTTP metodu.' });
-} 
+    return res.status(200).json({ success: true, user })
+}
+
+async function updateUser(req, res, userId) {
+    // Permission check: update users
+    if (req.user.roleLevel < 80) {
+        return res.status(403).json({ error: 'Insufficient permissions to update users' })
+    }
+
+    const allowedFields = ['ad', 'soyad', 'email', 'telefon', 'rol', 'aktif', 'subeId']
+    const updateData = {}
+    for (const key of allowedFields) {
+        if (req.body[key] !== undefined) updateData[key] = req.body[key]
+    }
+
+    if (updateData.rol && !VALID_TR_ROLES.includes(updateData.rol)) {
+        return res.status(400).json({ error: 'Invalid role specified' })
+    }
+
+    // Self role change guard for non-super admins
+    if (updateData.rol && req.user.roleLevel < 90 && req.user.userId === userId) {
+        return res.status(403).json({ error: 'You cannot change your own role' })
+    }
+
+    const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!exists) {
+        return res.status(404).json({ error: 'User not found' })
+    }
+
+    const updated = await prisma.user.update({
+        where: { id: userId },
+        data: { ...updateData, updatedAt: new Date() },
+        select: {
+            id: true,
+            personelId: true,
+            ad: true,
+            soyad: true,
+            email: true,
+            username: true,
+            rol: true,
+            telefon: true,
+            aktif: true,
+            subeId: true,
+            updatedAt: true
+        }
+    })
+
+    try {
+        await auditLog({
+            personelId: req.user.personelId || 'SYSTEM',
+            action: 'USER_UPDATED',
+            tableName: 'USER',
+            recordId: userId,
+            oldValues: null,
+            newValues: updateData,
+            description: 'User updated (path-based) ',
+            req
+        })
+    } catch { }
+
+    return res.status(200).json({ success: true, user: updated })
+}
+
+async function deleteUser(req, res, userId) {
+    // Permission check: delete users
+    if (req.user.roleLevel < 90) {
+        return res.status(403).json({ error: 'Insufficient permissions to delete users' })
+    }
+
+    const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, rol: true } })
+    if (!target) {
+        return res.status(404).json({ error: 'User not found' })
+    }
+    if (req.user.userId === userId) {
+        return res.status(400).json({ error: 'Cannot delete your own account' })
+    }
+
+    await prisma.user.update({ where: { id: userId }, data: { aktif: false, updatedAt: new Date() } })
+
+    try {
+        await auditLog({
+            personelId: req.user.personelId || 'SYSTEM',
+            action: 'USER_DELETED',
+            tableName: 'USER',
+            recordId: userId,
+            oldValues: null,
+            newValues: { aktif: false },
+            description: 'User soft-deleted (path-based)',
+            req
+        })
+    } catch { }
+
+    return res.status(200).json({ success: true, message: 'User deleted successfully' })
+}
+
+export default secureAPI(
+    withPrismaSecurity(handler),
+    {
+        permission: PERMISSIONS.VIEW_USERS,
+        preventSQLInjection: true,
+        enableAuditLogging: true
+    }
+) 

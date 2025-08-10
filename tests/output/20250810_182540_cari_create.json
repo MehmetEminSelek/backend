@@ -1,0 +1,20 @@
+{
+  "status": 201,
+  "json": {
+    "success": true,
+    "message": "Customer created successfully",
+    "customer": {
+      "id": 4573,
+      "cariAdi": "Test Cari 1754839540669",
+      "musteriKodu": "TC1754839540669",
+      "subeAdi": null,
+      "telefon": null,
+      "irtibatAdi": null,
+      "cariGrubu": null,
+      "fiyatGrubu": null,
+      "aktif": true,
+      "createdAt": "2025-08-10T15:25:40.681Z",
+      "updatedAt": "2025-08-10T15:25:40.681Z"
+    }
+  }
+}

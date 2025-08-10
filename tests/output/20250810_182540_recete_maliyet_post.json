@@ -1,0 +1,58 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "message": "Recipe cost calculated successfully",
+    "data": {
+      "calculation": {
+        "totalCost": 22580.600000000002,
+        "unitCost": 22580.600000000002,
+        "portion": 1,
+        "calculatedAt": "2025-08-10T15:25:40.492Z",
+        "breakdown": [
+          {
+            "materialId": 2,
+            "materialName": "HAMUR (YM)",
+            "materialCode": "YM001",
+            "materialType": "YARI_MAMUL",
+            "quantity": 24.839,
+            "unit": "KG",
+            "unitPrice": 0,
+            "totalCost": 0
+          },
+          {
+            "materialId": 15,
+            "materialName": "SADEYAĞ",
+            "materialCode": "HM012",
+            "materialType": "HAMMADDE",
+            "quantity": 32.258,
+            "unit": "KG",
+            "unitPrice": 700,
+            "totalCost": 22580.600000000002
+          },
+          {
+            "materialId": 9,
+            "materialName": "İÇ FISTIK",
+            "materialCode": "HM006",
+            "materialType": "HAMMADDE",
+            "quantity": 17.742,
+            "unit": "KG",
+            "unitPrice": 0,
+            "totalCost": 0
+          },
+          {
+            "materialId": 6,
+            "materialName": "SERBET (YM)",
+            "materialCode": "YM003",
+            "materialType": "YARI_MAMUL",
+            "quantity": 32.258,
+            "unit": "KG",
+            "unitPrice": 0,
+            "totalCost": 0
+          }
+        ]
+      },
+      "updatedRecipe": null
+    }
+  }
+}

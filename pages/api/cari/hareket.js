@@ -5,7 +5,7 @@ export default async function handler(req, res) {
         const { cariId } = req.query;
         if (!cariId) return res.status(400).json({ error: 'Cari ID zorunlu' });
         const hareketler = await prisma.cariHareket.findMany({
-            where: { cariId: Number(cariId) },
+            where: { cariMusteriId: Number(cariId) },
             orderBy: { createdAt: 'desc' },
         });
         return res.status(200).json(hareketler);
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'cariId, tip, tutar ve direction zorunlu' });
         }
         const hareket = await prisma.cariHareket.create({
-            data: { cariId: Number(cariId), tip, tutar: Number(tutar), aciklama, vadeTarihi: vadeTarihi ? new Date(vadeTarihi) : null, direction },
+            data: { cariMusteriId: Number(cariId), tip, tutar: Number(tutar), aciklama, vadeTarihi: vadeTarihi ? new Date(vadeTarihi) : null, direction },
         });
         return res.status(201).json(hareket);
     }

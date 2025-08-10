@@ -19,7 +19,7 @@ async function dropdownHandler(req, res) {
     userId: req.user?.id,
     userRole: req.user?.rol,
     headers: {
-      authorization: req.headers.authorization?.substring(0, 20) + '...',
+      authorization: req.headers?.authorization?.substring(0, 20) + '...',
       origin: req.headers.origin
     }
   });
@@ -329,6 +329,9 @@ async function getDropdownData(req, res) {
       success: true,
       message: 'Dropdown data retrieved successfully',
       data: results,
+      // Legacy support fields for frontend expectations
+      hammaddeler: Array.isArray(results.materials) ? results.materials.filter(m => m.tipi === 'HAMMADDE') : [],
+      yariMamuller: Array.isArray(results.materials) ? results.materials.filter(m => m.tipi === 'YARI_MAMUL') : [],
       metadata: {
         generatedAt: new Date(),
         userRole: req.user.rol,

@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "json": {
+    "status": "healthy",
+    "timestamp": "2025-08-10T15:25:39.855Z",
+    "uptime": 3887.8632891,
+    "environment": "development",
+    "version": "1.0.0",
+    "services": {
+      "api": "operational",
+      "database": "operational"
+    }
+  }
+}

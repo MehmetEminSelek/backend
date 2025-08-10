@@ -9,6 +9,7 @@ import { withPrismaSecurity } from '../../../lib/prisma-security.js';
 import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
 import { auditLog } from '../../../lib/audit-logger.js';
 import { validateInput } from '../../../lib/validation.js';
+import prisma from '../../../lib/prisma.js';
 
 /**
  * Pricing API Handler with Full Security Integration
@@ -90,7 +91,7 @@ async function getPricing(req, res) {
     }
 
     // Build secure where clause
-    const whereClause = {};
+    const whereClause = { deletedAt: null };
 
     // Product filtering
     if (urunId) {
@@ -104,7 +105,8 @@ async function getPricing(req, res) {
 
     // Price type filtering
     if (fiyatTipi) {
-        whereClause.fiyatTipi = { contains: fiyatTipi, mode: 'insensitive' };
+        // Enum eşleşmesi - şemadaki FiyatTipi ile uyumlu olacak şekilde
+        whereClause.fiyatTipi = fiyatTipi.toUpperCase();
     }
 
     // Date range filtering
@@ -120,12 +122,11 @@ async function getPricing(req, res) {
 
     // Search filtering (product names/codes)
     if (search) {
-        whereClause.urun = {
-            OR: [
-                { ad: { contains: search, mode: 'insensitive' } },
-                { kod: { contains: search, mode: 'insensitive' } }
-            ]
-        };
+        // İlişkisel arama: urun.ad veya urun.kod
+        whereClause.OR = [
+            { urun: { ad: { contains: search, mode: 'insensitive' } } },
+            { urun: { kod: { contains: search, mode: 'insensitive' } } }
+        ];
     }
 
     // Pagination and limits
@@ -134,7 +135,7 @@ async function getPricing(req, res) {
     const skip = (pageNum - 1) * limitNum;
 
     // Sorting validation
-    const validSortFields = ['baslangicTarihi', 'bitisTarihi', 'kgFiyati', 'birimFiyat', 'fiyatTipi'];
+    const validSortFields = ['baslangicTarihi', 'bitisTarihi', 'kgFiyati', 'fiyatTipi'];
     const validSortOrders = ['asc', 'desc'];
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'baslangicTarihi';
     const sortDirection = validSortOrders.includes(sortOrder) ? sortOrder : 'desc';
@@ -148,12 +149,10 @@ async function getPricing(req, res) {
                 urunId: true,
                 fiyatTipi: true,
                 kgFiyati: true,
-                birimFiyat: true,
                 birim: true,
                 aktif: true,
                 baslangicTarihi: true,
                 bitisTarihi: true,
-                olusturmaTarihi: true,
 
                 // Product information
                 urun: {
@@ -161,18 +160,14 @@ async function getPricing(req, res) {
                         id: true,
                         ad: true,
                         kod: true,
-                        kategori: true,
+                        kategori: {
+                            select: { id: true, ad: true, kod: true }
+                        },
                         birim: true
                     }
                 },
 
-                // Sensitive cost data only for managers+
-                ...(req.user.roleLevel >= 70 && {
-                    maliyetFiyati: true,
-                    karMarji: true,
-                    olusturanKullanici: true,
-                    guncelleyenKullanici: true
-                })
+                // Şemada ek finansal alanlar yok
             },
             orderBy: {
                 [sortField]: sortDirection
@@ -189,11 +184,7 @@ async function getPricing(req, res) {
     const pricingStats = req.user.roleLevel >= 70 ? await prisma.urunFiyat.aggregate({
         where: { ...whereClause, aktif: true },
         _count: { id: true },
-        _avg: {
-            kgFiyati: true,
-            birimFiyat: true,
-            karMarji: true
-        },
+        _avg: { kgFiyati: true },
         _min: {
             kgFiyati: true,
             baslangicTarihi: true
@@ -226,8 +217,7 @@ async function getPricing(req, res) {
             statistics: {
                 totalActivePrices: pricingStats._count.id,
                 averageKgPrice: pricingStats._avg?.kgFiyati || 0,
-                averageUnitPrice: pricingStats._avg?.birimFiyat || 0,
-                averageMargin: pricingStats._avg?.karMarji || 0,
+                // averageUnitPrice kaldırıldı
                 priceRange: {
                     min: pricingStats._min?.kgFiyati || 0,
                     max: pricingStats._max?.kgFiyati || 0
@@ -254,10 +244,10 @@ async function createPricing(req, res) {
 
     // Input validation with security checks
     const validationResult = validateInput(req.body, {
-        requiredFields: ['urunId', 'fiyatTipi', 'kgFiyati', 'birimFiyat', 'birim'],
+        requiredFields: ['urunId', 'fiyatTipi', 'kgFiyati', 'birim'],
         allowedFields: [
-            'urunId', 'fiyatTipi', 'kgFiyati', 'birimFiyat', 'birim',
-            'maliyetFiyati', 'karMarji', 'baslangicTarihi', 'bitisTarihi',
+            'urunId', 'fiyatTipi', 'kgFiyati', 'birim',
+            'baslangicTarihi', 'bitisTarihi',
             'aktif', 'aciklama'
         ],
         requireSanitization: true
@@ -271,21 +261,15 @@ async function createPricing(req, res) {
     }
 
     const {
-        urunId, fiyatTipi, kgFiyati, birimFiyat, birim,
-        maliyetFiyati, karMarji, baslangicTarihi, bitisTarihi,
+        urunId, fiyatTipi, kgFiyati, birim,
+        baslangicTarihi, bitisTarihi,
         aktif = true, aciklama
     } = req.body;
 
     // Business logic validation
-    if (kgFiyati <= 0 || birimFiyat <= 0) {
+    if (kgFiyati <= 0) {
         return res.status(400).json({
             error: 'Prices must be positive'
-        });
-    }
-
-    if (maliyetFiyati && maliyetFiyati < 0) {
-        return res.status(400).json({
-            error: 'Cost price cannot be negative'
         });
     }
 
@@ -345,40 +329,28 @@ async function createPricing(req, res) {
             throw new Error('Active price already exists for this product and price type in the date range');
         }
 
-        // Calculate margin if not provided
-        let calculatedMargin = karMarji;
-        if (!calculatedMargin && maliyetFiyati && kgFiyati > 0) {
-            calculatedMargin = ((kgFiyati - maliyetFiyati) / kgFiyati) * 100;
-        }
-
         // Create pricing with audit trail
         const newPricing = await tx.urunFiyat.create({
             data: {
                 urunId: parseInt(urunId),
                 fiyatTipi: fiyatTipi.toUpperCase(),
                 kgFiyati: parseFloat(kgFiyati),
-                birimFiyat: parseFloat(birimFiyat),
                 birim,
-                maliyetFiyati: maliyetFiyati ? parseFloat(maliyetFiyati) : null,
-                karMarji: calculatedMargin || 0,
                 baslangicTarihi: startDate,
                 bitisTarihi: endDate,
                 aktif,
                 aciklama: aciklama || '',
-                olusturmaTarihi: new Date(),
-                olusturanKullanici: req.user.userId
+                createdBy: String(req.user?.personelId || req.user?.id || req.user?.userId || '')
             },
             select: {
                 id: true,
                 urunId: true,
                 fiyatTipi: true,
                 kgFiyati: true,
-                birimFiyat: true,
                 birim: true,
                 aktif: true,
                 baslangicTarihi: true,
                 bitisTarihi: true,
-                olusturmaTarihi: true,
                 urun: {
                     select: {
                         ad: true,
@@ -400,7 +372,6 @@ async function createPricing(req, res) {
         productName: result.urun.ad,
         priceType: result.fiyatTipi,
         kgPrice: result.kgFiyati,
-        unitPrice: result.birimFiyat,
         active: result.aktif,
         sensitiveOperation: true
     });
@@ -426,11 +397,7 @@ async function updatePricing(req, res) {
     // Input validation
     const validationResult = validateInput(req.body, {
         requiredFields: ['id'],
-        allowedFields: [
-            'id', 'fiyatTipi', 'kgFiyati', 'birimFiyat', 'birim',
-            'maliyetFiyati', 'karMarji', 'baslangicTarihi', 'bitisTarihi',
-            'aktif', 'aciklama'
-        ],
+        allowedFields: ['id', 'fiyatTipi', 'kgFiyati', 'birim', 'baslangicTarihi', 'bitisTarihi', 'aktif', 'aciklama'],
         requireSanitization: true
     });
 
@@ -451,7 +418,6 @@ async function updatePricing(req, res) {
             urunId: true,
             fiyatTipi: true,
             kgFiyati: true,
-            birimFiyat: true,
             aktif: true,
             urun: {
                 select: {
@@ -472,23 +438,13 @@ async function updatePricing(req, res) {
     const updateData = {};
     const changeLog = [];
 
-    const allowedFields = [
-        'fiyatTipi', 'kgFiyati', 'birimFiyat', 'birim',
-        'maliyetFiyati', 'karMarji', 'baslangicTarihi', 'bitisTarihi',
-        'aktif', 'aciklama'
-    ];
+    const allowedFields = ['id', 'fiyatTipi', 'kgFiyati', 'birim', 'baslangicTarihi', 'bitisTarihi', 'aktif', 'aciklama'];
 
     for (const field of allowedFields) {
         if (updateFields[field] !== undefined) {
             updateData[field] = updateFields[field];
             changeLog.push(`${field} updated`);
         }
-    }
-
-    // Recalculate margin if prices are updated
-    if (updateData.kgFiyati && updateData.maliyetFiyati) {
-        updateData.karMarji = ((updateData.kgFiyati - updateData.maliyetFiyati) / updateData.kgFiyati) * 100;
-        changeLog.push('margin recalculated');
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -503,17 +459,14 @@ async function updatePricing(req, res) {
             where: { id: parseInt(pricingId) },
             data: {
                 ...updateData,
-                guncellemeTarihi: new Date(),
-                guncelleyenKullanici: req.user.userId
+                updatedBy: String(req.user?.personelId || req.user?.id || req.user?.userId || '')
             },
             select: {
                 id: true,
                 urunId: true,
                 fiyatTipi: true,
                 kgFiyati: true,
-                birimFiyat: true,
                 aktif: true,
-                guncellemeTarihi: true,
                 urun: {
                     select: {
                         ad: true,
@@ -533,10 +486,7 @@ async function updatePricing(req, res) {
         productCode: result.urun.kod,
         productName: result.urun.ad,
         changes: changeLog,
-        newPrices: {
-            kgFiyati: result.kgFiyati,
-            birimFiyat: result.birimFiyat
-        },
+        newPrices: { kgFiyati: result.kgFiyati },
         sensitiveOperation: true
     });
 
@@ -614,9 +564,9 @@ async function deletePricing(req, res) {
             data: {
                 aktif: false,
                 bitisTarihi: new Date(), // Set end date to now
-                silinmeTarihi: new Date(),
-                silenKullanici: req.user.userId,
-                silmeSebebi: 'Yönetici silme işlemi'
+                deletedAt: new Date(),
+                deletedBy: String(req.user?.personelId || req.user?.id || req.user?.userId || ''),
+                deleteReason: 'Yönetici silme işlemi'
             }
         }, 'PRICING_DEACTIVATED');
 
@@ -653,13 +603,9 @@ export default secureAPI(
         // DELETE: DELETE_PRICING (Admin+)
 
         // Input Validation Configuration
-        allowedFields: [
-            'id', 'urunId', 'fiyatTipi', 'kgFiyati', 'birimFiyat', 'birim',
-            'maliyetFiyati', 'karMarji', 'baslangicTarihi', 'bitisTarihi',
-            'aktif', 'aciklama', 'page', 'limit', 'search', 'sortBy', 'sortOrder'
-        ],
+        allowedFields: ['id', 'urunId', 'fiyatTipi', 'kgFiyati', 'birim', 'baslangicTarihi', 'bitisTarihi', 'aktif', 'aciklama', 'page', 'limit', 'search', 'sortBy', 'sortOrder'],
         requiredFields: {
-            POST: ['urunId', 'fiyatTipi', 'kgFiyati', 'birimFiyat', 'birim'],
+            POST: ['urunId', 'fiyatTipi', 'kgFiyati', 'birim'],
             PUT: ['id'],
             DELETE: ['id']
         },

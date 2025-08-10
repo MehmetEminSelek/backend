@@ -1,0 +1,23 @@
+{
+  "status": 201,
+  "json": {
+    "success": true,
+    "message": "User created successfully",
+    "user": {
+      "id": 99,
+      "personelId": "P099",
+      "ad": "Test",
+      "soyad": "Kullanici",
+      "email": "test.user.1754839540552@example.com",
+      "username": "test_user_1754839540552",
+      "rol": "PERSONEL",
+      "telefon": null,
+      "aktif": true,
+      "subeId": null,
+      "gunlukUcret": 0,
+      "sgkDurumu": "YOK",
+      "girisYili": null,
+      "createdAt": "2025-08-10T15:25:40.618Z"
+    }
+  }
+}

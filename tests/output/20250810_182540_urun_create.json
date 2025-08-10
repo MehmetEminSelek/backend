@@ -1,0 +1,33 @@
+{
+  "status": 201,
+  "json": {
+    "success": true,
+    "message": "Product created successfully",
+    "product": {
+      "id": 40,
+      "ad": "Test Urun 1754839540699",
+      "kod": "UT1754839540699",
+      "kategoriId": null,
+      "aciklama": null,
+      "aktif": true,
+      "satisaUygun": true,
+      "mevcutStok": 0,
+      "minStokSeviye": 0,
+      "birim": "KG",
+      "maliyetFiyati": 0,
+      "karMarji": 0,
+      "karOrani": 0,
+      "guncellemeTarihi": null,
+      "createdAt": "2025-08-10T15:25:40.711Z",
+      "updatedAt": "2025-08-10T15:25:40.711Z",
+      "createdBy": null,
+      "updatedBy": null,
+      "lastModifiedBy": null,
+      "lastModifiedAt": null,
+      "lastAction": null,
+      "deletedAt": null,
+      "deletedBy": null,
+      "deleteReason": null
+    }
+  }
+}

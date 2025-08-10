@@ -11,7 +11,7 @@ async function handler(req, res) {
     }
 
     try {
-        const authHeader = req.headers.authorization;
+        const authHeader = req.headers?.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({
                 error: 'Token required',
@@ -77,6 +77,9 @@ async function handler(req, res) {
             // VIEWER rolü schema'da yok - kaldırıldı
         };
 
+        // Generate a fresh session expiry (keep client in sync)
+        const sessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
         return res.status(200).json({
             success: true,
             user: {
@@ -88,7 +91,8 @@ async function handler(req, res) {
                 personelId: user.personelId
             },
             roleLevel: roleLevels[user.rol] || 30,
-            tokenValid: true
+            tokenValid: true,
+            sessionExpiry
         });
 
     } catch (error) {

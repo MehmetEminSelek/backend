@@ -1,0 +1,502 @@
+{
+  "status": 200,
+  "json": {
+    "success": true,
+    "recipes": [
+      {
+        "id": 8,
+        "ad": "BULBUL YUVASI (UR)",
+        "urunId": null,
+        "urun": null,
+        "icerikelek": [
+          {
+            "id": 204,
+            "miktar": 24.839,
+            "birim": "KG",
+            "material": {
+              "id": 2,
+              "ad": "HAMUR (YM)",
+              "kod": "YM001"
+            }
+          },
+          {
+            "id": 205,
+            "miktar": 32.258,
+            "birim": "KG",
+            "material": {
+              "id": 15,
+              "ad": "SADEYAĞ",
+              "kod": "HM012"
+            }
+          },
+          {
+            "id": 206,
+            "miktar": 17.742,
+            "birim": "KG",
+            "material": {
+              "id": 9,
+              "ad": "İÇ FISTIK",
+              "kod": "HM006"
+            }
+          },
+          {
+            "id": 207,
+            "miktar": 32.258,
+            "birim": "KG",
+            "material": {
+              "id": 6,
+              "ad": "SERBET (YM)",
+              "kod": "YM003"
+            }
+          }
+        ],
+        "createdAt": "2025-08-10T13:50:53.453Z",
+        "updatedAt": "2025-08-10T13:53:57.225Z"
+      },
+      {
+        "id": 4,
+        "ad": "BURMA KADAYIF (UR)",
+        "urunId": null,
+        "urun": null,
+        "icerikelek": [
+          {
+            "id": 185,
+            "miktar": 32.799,
+            "birim": "KG",
+            "material": {
+              "id": 15,
+              "ad": "SADEYAĞ",
+              "kod": "HM012"
+            }
+          },
+          {
+            "id": 186,
+            "miktar": 33.507,
+            "birim": "KG",
+            "material": {
+              "id": 9,
+              "ad": "İÇ FISTIK",
+              "kod": "HM006"
+            }
+          },
+          {
+            "id": 187,
+            "miktar": 33.299,
+            "birim": "KG",
+            "material": {
+              "id": 6,
+              "ad": "SERBET (YM)",
+              "kod": "YM003"
+            }
+          },
+          {
+            "id": 188,
+            "miktar": 27.263,
+            "birim": "KG",
+            "material": {
+              "id": 10,
+              "ad": "KADAYIF",
+              "kod": "HM007"
+            }
+          }
+        ],
+        "createdAt": "2025-08-10T13:50:53.387Z",
+        "updatedAt": "2025-08-10T13:53:57.158Z"
+      },
+      {
+        "id": 12,
+        "ad": "CEVIZLI BAKLAVA (UR)",
+        "urunId": null,
+        "urun": null,
+        "icerikelek": [
+          {
+            "id": 222,
+            "miktar": 29.443,
+            "birim": "KG",
+            "material": {
+              "id": 2,
+              "ad": "HAMUR (YM)",
+              "kod": "YM001"
+            }
+          },
+          {
+            "id": 223,
+            "miktar": 12.153,
+            "birim": "KG",
+            "material": {
+              "id": 4,
+              "ad": "KAYMAK (YM)",
+              "kod": "YM002"
+            }
+          },
+          {
+            "id": 224,
+            "miktar": 2.204,
+            "birim": "KG",
+            "material": {
+              "id": 15,
+              "ad": "SADEYAĞ",
+              "kod": "HM012"
+            }
+          },
+          {
+            "id": 225,
+            "miktar": 9.621,
+            "birim": "KG",
+            "material": {
+              "id": 3,
+              "ad": "CEVİZ",
+              "kod": "HM002"
+            }
+          },
+          {
+            "id": 226,
+            "miktar": 33.856,
+            "birim": "KG",
+            "material": {
+              "id": 6,
+              "ad": "SERBET (YM)",
+              "kod": "YM003"
+            }
+          }
+        ],
+        "createdAt": "2025-08-10T13:50:53.523Z",
+        "updatedAt": "2025-08-10T13:53:57.292Z"
+      },
+      {
+        "id": 3,
+        "ad": "DOLAMA (UR)",
+        "urunId": null,
+        "urun": null,
+        "icerikelek": [
+          {
+            "id": 181,
+            "miktar": 14.878,
+            "birim": "KG",
+            "material": {
+              "id": 2,
+              "ad": "HAMUR (YM)",
+              "kod": "YM001"
+            }
+          },
+          {
+            "id": 182,
+            "miktar": 26.927,
+            "birim": "KG",
+            "material": {
+              "id": 15,
+              "ad": "SADEYAĞ",
+              "kod": "HM012"
+            }
+          },
+          {
+            "id": 183,
+            "miktar": 44.488,
+            "birim": "KG",
+            "material": {
+              "id": 9,
+              "ad": "İÇ FISTIK",
+              "kod": "HM006"
+            }
+          },
+          {
+            "id": 184,
+            "miktar": 2.439,
+            "birim": "KG",
+            "material": {
+              "id": 6,
+              "ad": "SERBET (YM)",
+              "kod": "YM003"
+            }
+          }
+        ],
+        "createdAt": "2025-08-10T13:50:53.372Z",
+        "updatedAt": "2025-08-10T13:53:57.134Z"
+      },
+      {
+        "id": 2,
+        "ad": "EZME (UR)",
+        "urunId": null,
+        "urun": null,
+        "icerikelek": [
+          {
+            "id": 165,
+            "miktar": 23.855,
+            "birim": "LITRE",
+            "material": {
+              "id": 17,
+              "ad": "SU",
+              "kod": "HM014"
+            }
+          },
+          {
+            "id": 166,
+            "miktar": 9.542,
+            "birim": "KG",
+            "material": {
+              "id": 5,
+              "ad": "GLİKOZ",
+              "kod": "HM003"
+            }
+          },
+          {
+            "id": 173,
+            "miktar": 206.536,
+            "birim": "KG",
+            "material": {
+              "id": 11,
+              "ad": "KARAKOYUNLU UN",
+              "kod": "HM008"
+            }
+          },
+          {
+            "id": 167,
+            "miktar": 49.256,
+            "birim": "KG",
+            "material": {
+              "id": 7,
+              "ad": "IRMIK NO:0",
+              "kod": "HM004"
+            }
+          },
+          {
+            "id": 164,
+            "miktar": 51.974,
+            "birim": "KG",
+            "material": {
+              "id": 20,
+              "ad": "TOZ ŞEKER",
+              "kod": "HM017"
+            }
+          },
+          {
+            "id": 169,
+            "miktar": 23.405,
+            "birim": "KG",
+            "material": {
+              "id": 15,
+              "ad": "SADEYAĞ",
+              "kod": "HM012"
+            }
+          },
+          {
+            "id": 171,
+            "miktar": 4.306,
+            "birim": "KG",
+            "material": {
+              "id": 22,
+              "ad": "YOĞURT",
+              "kod": "HM019"
+            }
+          },
+          {
+            "id": 172,
+            "miktar": 180,
+            "birim": "KG",
+            "material": {
+              "id": 16,
+              "ad": "SODA GR",
+              "kod": "HM013"
+            }
+          },
+          {
+            "id": 163,
+            "miktar": 67.473,
+            "birim": "KG",
+            "material": {
+              "id": 9,
+              "ad": "İÇ FISTIK",
+              "kod": "HM006"
+            }
+          }
+        ],
+        "createdAt": "2025-08-10T13:50:53.325Z",
+        "updatedAt": "2025-08-10T13:53:57.118Z"
+      }
+    ],
+    "legacy": [
+      {
+        "id": 8,
+        "name": "BULBUL YUVASI (UR)",
+        "urunId": null,
+        "urunAd": null,
+        "ingredients": [
+          {
+            "stokKod": "YM001",
+            "stokAd": "HAMUR (YM)",
+            "miktarGram": 24.839
+          },
+          {
+            "stokKod": "HM012",
+            "stokAd": "SADEYAĞ",
+            "miktarGram": 32.258
+          },
+          {
+            "stokKod": "HM006",
+            "stokAd": "İÇ FISTIK",
+            "miktarGram": 17.742
+          },
+          {
+            "stokKod": "YM003",
+            "stokAd": "SERBET (YM)",
+            "miktarGram": 32.258
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "name": "BURMA KADAYIF (UR)",
+        "urunId": null,
+        "urunAd": null,
+        "ingredients": [
+          {
+            "stokKod": "HM012",
+            "stokAd": "SADEYAĞ",
+            "miktarGram": 32.799
+          },
+          {
+            "stokKod": "HM006",
+            "stokAd": "İÇ FISTIK",
+            "miktarGram": 33.507
+          },
+          {
+            "stokKod": "YM003",
+            "stokAd": "SERBET (YM)",
+            "miktarGram": 33.299
+          },
+          {
+            "stokKod": "HM007",
+            "stokAd": "KADAYIF",
+            "miktarGram": 27.263
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "name": "CEVIZLI BAKLAVA (UR)",
+        "urunId": null,
+        "urunAd": null,
+        "ingredients": [
+          {
+            "stokKod": "YM001",
+            "stokAd": "HAMUR (YM)",
+            "miktarGram": 29.443
+          },
+          {
+            "stokKod": "YM002",
+            "stokAd": "KAYMAK (YM)",
+            "miktarGram": 12.153
+          },
+          {
+            "stokKod": "HM012",
+            "stokAd": "SADEYAĞ",
+            "miktarGram": 2.204
+          },
+          {
+            "stokKod": "HM002",
+            "stokAd": "CEVİZ",
+            "miktarGram": 9.621
+          },
+          {
+            "stokKod": "YM003",
+            "stokAd": "SERBET (YM)",
+            "miktarGram": 33.856
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "name": "DOLAMA (UR)",
+        "urunId": null,
+        "urunAd": null,
+        "ingredients": [
+          {
+            "stokKod": "YM001",
+            "stokAd": "HAMUR (YM)",
+            "miktarGram": 14.878
+          },
+          {
+            "stokKod": "HM012",
+            "stokAd": "SADEYAĞ",
+            "miktarGram": 26.927
+          },
+          {
+            "stokKod": "HM006",
+            "stokAd": "İÇ FISTIK",
+            "miktarGram": 44.488
+          },
+          {
+            "stokKod": "YM003",
+            "stokAd": "SERBET (YM)",
+            "miktarGram": 2.439
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "EZME (UR)",
+        "urunId": null,
+        "urunAd": null,
+        "ingredients": [
+          {
+            "stokKod": "HM014",
+            "stokAd": "SU",
+            "miktarGram": 23.855
+          },
+          {
+            "stokKod": "HM003",
+            "stokAd": "GLİKOZ",
+            "miktarGram": 9.542
+          },
+          {
+            "stokKod": "HM008",
+            "stokAd": "KARAKOYUNLU UN",
+            "miktarGram": 206.536
+          },
+          {
+            "stokKod": "HM004",
+            "stokAd": "IRMIK NO:0",
+            "miktarGram": 49.256
+          },
+          {
+            "stokKod": "HM017",
+            "stokAd": "TOZ ŞEKER",
+            "miktarGram": 51.974
+          },
+          {
+            "stokKod": "HM012",
+            "stokAd": "SADEYAĞ",
+            "miktarGram": 23.405
+          },
+          {
+            "stokKod": "HM019",
+            "stokAd": "YOĞURT",
+            "miktarGram": 4.306
+          },
+          {
+            "stokKod": "HM013",
+            "stokAd": "SODA GR",
+            "miktarGram": 180
+          },
+          {
+            "stokKod": "HM006",
+            "stokAd": "İÇ FISTIK",
+            "miktarGram": 67.473
+          }
+        ]
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalItems": 15,
+      "itemsPerPage": 5
+    },
+    "metadata": {
+      "generatedAt": "2025-08-10T15:25:40.440Z",
+      "userRole": "super_admin",
+      "accessLevel": 100,
+      "costDataIncluded": false
+    }
+  }
+}
