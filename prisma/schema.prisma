@@ -46,7 +46,7 @@ model User {
   stokHareketleri                 StokHareket[]
   olusturduguStokTransferleri     StokTransfer[] @relation("StokTransferOlusturan")
   gonderdigiStokTransferleri      StokTransfer[] @relation("StokTransferGonderen")
-  teslimAldığıStokTransferleri StokTransfer[] @relation("StokTransferTeslimAlan")
+  teslimAldigiStokTransferleri StokTransfer[] @relation("StokTransferTeslimAlan")
   cariOdemeler                    CariOdeme[]
   cariHareketler                  CariHareket[]
 
