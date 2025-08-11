@@ -1,8 +1,12 @@
 import prisma from '../../../lib/prisma.js';
-import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
+import { secureAPI } from '../../../lib/api-security.js';
+import { withPrismaSecurity } from '../../../lib/prisma-security.js';
+import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
+import { auditLog } from '../../../lib/audit-logger.js';
+import { validateInput } from '../../../lib/validation.js';
 
 // Simple pricing API (GET list, POST create) for integration
-export default withCorsAndAuth(async function handler(req, res) {
+async function pricingHandler(req, res) {
     try {
         if (req.method === 'POST') {
             const { urunId, birim, kgFiyati, baslangicTarihi, bitisTarihi, fiyatTipi, aktif } = req.body || {};
@@ -39,7 +43,7 @@ export default withCorsAndAuth(async function handler(req, res) {
         console.error('Fiyatlar API error:', e);
         return res.status(500).json({ message: 'Fiyat işlemi başarısız', error: e.message });
     }
-});
+}
 
 /**
  * Get Pricing Data with Advanced Filtering and Security
