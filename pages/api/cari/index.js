@@ -391,7 +391,7 @@ async function createCustomer(req, res) {
 async function updateCustomer(req, res) {
     console.log('🔍 PUT Update Customer:', req.body);
 
-    const { id, ...updateData } = req.body;
+    const { id, ...rawUpdate } = req.body;
 
     if (!id) {
         return res.status(400).json({
@@ -400,12 +400,70 @@ async function updateCustomer(req, res) {
     }
 
     try {
+        const customerId = parseInt(id);
+
+        // Whitelist and map incoming fields to Prisma model fields
+        const allowedFields = [
+            'cariAdi',
+            'musteriKodu',
+            'telefon',
+            'irtibatAdi',
+            'subeAdi',
+            'cariGrubu',
+            'fiyatGrubu',
+            'aktif'
+        ];
+
+        const updateData = {};
+
+        // Map frontend "ad" to prisma "cariAdi"
+        if (typeof rawUpdate.ad === 'string' && rawUpdate.ad.trim() !== '') {
+            updateData.cariAdi = rawUpdate.ad.trim();
+        }
+
+        // Copy allowed fields only
+        for (const key of allowedFields) {
+            if (rawUpdate[key] !== undefined) {
+                updateData[key] = rawUpdate[key];
+            }
+        }
+
+        // Build nested address update if provided
+        let adreslerMutation = undefined;
+        if (Array.isArray(rawUpdate.adresler)) {
+            const toCreate = rawUpdate.adresler
+                .filter(a => a && typeof a.adres === 'string' && a.adres.trim() !== '')
+                .map(a => ({
+                    tip: String(a.tip || '').toUpperCase().startsWith('E') ? 'EV' : (String(a.tip || '').toUpperCase().startsWith('I') ? 'IS' : 'DIGER'),
+                    adres: a.adres.trim(),
+                    il: a.il || null,
+                    ilce: a.ilce || null,
+                    mahalle: a.mahalle || null,
+                    postaKodu: a.postaKodu || null,
+                    tarif: a.tarif || null,
+                    varsayilan: Boolean(a.varsayilan),
+                    aktif: a.aktif === false ? false : true
+                }));
+
+            adreslerMutation = {
+                // Nested deleteMany without filter removes all children of this parent
+                deleteMany: {},
+                create: toCreate
+            };
+        }
+
         const updatedCustomer = await prisma.cariMusteri.update({
-            where: { id: parseInt(id) },
-            data: updateData
+            where: { id: customerId },
+            data: {
+                ...updateData,
+                ...(adreslerMutation ? { adresler: adreslerMutation } : {})
+            }
         });
 
         console.log(`✅ Customer updated: ${updatedCustomer.id}`);
+
+        // Invalidate simple cache after mutation
+        try { responseCache.clear(); } catch { }
 
         return res.status(200).json({
             success: true,

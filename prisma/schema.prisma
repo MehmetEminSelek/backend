@@ -36,19 +36,20 @@ model User {
   rol         PersonelRol @default(PERSONEL)
   gunlukUcret Float?      @default(0)
   sgkDurumu   SgkDurumu   @default(YOK)
-  girisYili   DateTime?   
+  girisYili   DateTime?
   aktif       Boolean     @default(true)
   erpDurum    ErpDurum    @default(AKTIF)
 
   // Relations
-  olusturduguSiparisler           Siparis[]      @relation("SiparisOlusturan")
-  onayladigiSiparisler            Siparis[]      @relation("SiparisOnaylayan")
-  stokHareketleri                 StokHareket[]
-  olusturduguStokTransferleri     StokTransfer[] @relation("StokTransferOlusturan")
-  gonderdigiStokTransferleri      StokTransfer[] @relation("StokTransferGonderen")
+  olusturduguSiparisler        Siparis[]      @relation("SiparisOlusturan")
+  onayladigiSiparisler         Siparis[]      @relation("SiparisOnaylayan")
+  stokHareketleri              StokHareket[]
+  olusturduguStokTransferleri  StokTransfer[] @relation("StokTransferOlusturan")
+  gonderdigiStokTransferleri   StokTransfer[] @relation("StokTransferGonderen")
   teslimAldigiStokTransferleri StokTransfer[] @relation("StokTransferTeslimAlan")
-  cariOdemeler                    CariOdeme[]
-  cariHareketler                  CariHareket[]
+  cariOdemeler                 CariOdeme[]
+  cariHareketler               CariHareket[]
+  masraflar                    Masraf[]
 
   // Audit Relations - KİM NEYİ DEĞİŞTİRDİ TAKİBİ
   auditLogs            AuditLog[] @relation("PersonelAuditLogs")
@@ -112,13 +113,13 @@ model Sube {
   kapanisSaat String? // "22:00"
 
   // Relations
-  personeller         User[]
-  siparisler          Siparis[]
-  hedefSiparisler     Siparis[]      @relation("HedefSube")
-  neredenSiparisler   Siparis[]      @relation("SubeNereden")   // Şubeden şubeye siparişlerde nereden
-  nereyeSiparisler    Siparis[]      @relation("SubeNereye")    // Şubeden şubeye siparişlerde nereye
-  kaynakTransferler   StokTransfer[] @relation("KaynakSube")
-  hedefTransferler    StokTransfer[] @relation("HedefSube")
+  personeller       User[]
+  siparisler        Siparis[]
+  hedefSiparisler   Siparis[]      @relation("HedefSube")
+  neredenSiparisler Siparis[]      @relation("SubeNereden") // Şubeden şubeye siparişlerde nereden
+  nereyeSiparisler  Siparis[]      @relation("SubeNereye") // Şubeden şubeye siparişlerde nereye
+  kaynakTransferler StokTransfer[] @relation("KaynakSube")
+  hedefTransferler  StokTransfer[] @relation("HedefSube")
 
   // Audit
   createdAt DateTime @default(now())
@@ -168,11 +169,11 @@ model Urun {
   aciklama   String?
 
   // Fiyat ilişkisi - SABIT FİYAT KALDIRILDI!
-  fiyatlar         UrunFiyat[]     // Tüm tarihsel fiyatlar
-  
+  fiyatlar UrunFiyat[] // Tüm tarihsel fiyatlar
+
   // Güncel fiyat için computed field kullanılacak
   // getCurrentPrice(tarih?: Date) function ile alınacak
-  
+
   // Status
   aktif       Boolean @default(true)
   satisaUygun Boolean @default(true)
@@ -239,27 +240,27 @@ model UrunFiyat {
   urun   Urun @relation(fields: [urunId], references: [id], onDelete: Cascade)
 
   // Fiyat Bilgileri
-  kgFiyati     Float        // CSV'deki KG FİYATI
-  birim        SatisBirimi  @default(KG)
-  fiyatTipi    FiyatTipi    @default(NORMAL)
+  kgFiyati  Float // CSV'deki KG FİYATI
+  birim     SatisBirimi @default(KG)
+  fiyatTipi FiyatTipi   @default(NORMAL)
 
   // TARİHSEL TAKİP - ÇOK ÖNEMLİ!
-  baslangicTarihi DateTime     // Bu fiyatın geçerli olduğu başlangıç tarihi
-  bitisTarihi     DateTime?    // Bu fiyatın geçersiz olduğu tarih (NULL = hala geçerli)
-  
+  baslangicTarihi DateTime // Bu fiyatın geçerli olduğu başlangıç tarihi
+  bitisTarihi     DateTime? // Bu fiyatın geçersiz olduğu tarih (NULL = hala geçerli)
+
   // Durum Kontrolü
-  aktif        Boolean      @default(true)
+  aktif Boolean @default(true)
 
   // Kim Ne Zaman Ekledi/Değiştirdi
-  createdAt    DateTime     @default(now())
-  createdBy    String?      // Personel ID'si
-  updatedAt    DateTime     @updatedAt
-  updatedBy    String?      // Son güncelleyen personel ID'si
-  
+  createdAt DateTime @default(now())
+  createdBy String? // Personel ID'si
+  updatedAt DateTime @updatedAt
+  updatedBy String? // Son güncelleyen personel ID'si
+
   // Zam/İndirim Sebepleri
-  degisiklikSebebi String?   // "GENEL ZAM", "MALZEME ZAMMI", "KAMPANYA" vb.
-  eskiFiyat        Float?    // Önceki fiyat (karşılaştırma için)
-  yuzdelik         Float?    // Değişim yüzdesi
+  degisiklikSebebi String? // "GENEL ZAM", "MALZEME ZAMMI", "KAMPANYA" vb.
+  eskiFiyat        Float? // Önceki fiyat (karşılaştırma için)
+  yuzdelik         Float? // Değişim yüzdesi
 
   // Soft delete metadata
   deletedAt    DateTime?
@@ -274,32 +275,32 @@ model UrunFiyat {
 
 // Tepsi/Tava Fiyatları - Ayrı Sistem
 model TepsiFiyat {
-  id           Int        @id @default(autoincrement())
-  tepsiTavaId  Int
-  tepsiTava    TepsiTava  @relation(fields: [tepsiTavaId], references: [id], onDelete: Cascade)
+  id          Int       @id @default(autoincrement())
+  tepsiTavaId Int
+  tepsiTava   TepsiTava @relation(fields: [tepsiTavaId], references: [id], onDelete: Cascade)
 
   // Fiyat Bilgileri
-  adetFiyati      Float        // CSV'deki Adet Fiyatı
-  fiyatTipi       FiyatTipi    @default(NORMAL)
-  
+  adetFiyati Float // CSV'deki Adet Fiyatı
+  fiyatTipi  FiyatTipi @default(NORMAL)
+
   // TARİHSEL TAKİP
-  baslangicTarihi DateTime     
-  bitisTarihi     DateTime?    
-  
+  baslangicTarihi DateTime
+  bitisTarihi     DateTime?
+
   // Durum Kontrolü
-  aktif           Boolean      @default(true)
-  
+  aktif Boolean @default(true)
+
   // Kim Ne Zaman
-  createdAt       DateTime     @default(now())
-  createdBy       String?
-  updatedAt       DateTime     @updatedAt
-  updatedBy       String?
-  
+  createdAt DateTime @default(now())
+  createdBy String?
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
   // Değişiklik Takibi
   degisiklikSebebi String?
   eskiFiyat        Float?
   yuzdelik         Float?
-  
+
   @@unique([tepsiTavaId, baslangicTarihi, fiyatTipi])
   @@index([aktif])
   @@index([baslangicTarihi])
@@ -319,22 +320,20 @@ enum FiyatTipi {
 // 📦 PACKAGING MANAGEMENT (CSV Based)
 // ===================================================================
 
-
-
 model TepsiTava {
   id       Int     @id @default(autoincrement())
   ad       String  @unique
   kod      String  @unique // TP001, TP002, vb. (CSV'den)
   aciklama String?
-  
+
   // Fiyat ilişkisi - SABIT FİYAT KALDIRILDI!
-  fiyatlar         TepsiFiyat[]    // Tüm tarihsel fiyatlar
-  
+  fiyatlar TepsiFiyat[] // Tüm tarihsel fiyatlar
+
   // Fiziksel Özellikler
-  agirlik  Float? // gram
-  boyut    String? // "1 Li", "2 Li", vb.
-  malzeme  String? // Aluminum, Plastic
-  aktif    Boolean @default(true)
+  agirlik Float? // gram
+  boyut   String? // "1 Li", "2 Li", vb.
+  malzeme String? // Aluminum, Plastic
+  aktif   Boolean @default(true)
 
   // Relations
   siparisKalemleri SiparisKalemi[]
@@ -407,7 +406,7 @@ model Cari {
 
   // Relations
   // REMOVED relations - only using CariMusteri now
-  
+
   // REMOVED: old relations - not needed anymore
 
   // Audit
@@ -427,30 +426,30 @@ model Cari {
 
 // YENİ MODEL: Cari Adres Yönetimi
 model CariAdres {
-  id     Int  @id @default(autoincrement())
-  
+  id Int @id @default(autoincrement())
+
   // REMOVED: Ana Cari relation - only using CariMusteri now
-  
+
   // CariMusteri relation - CSV'den gelen müşteriler için
   cariMusteriId Int?
   cariMusteri   CariMusteri? @relation(fields: [cariMusteriId], references: [id], onDelete: Cascade)
 
   // Adres Bilgileri
-  tip          AdresTipi @default(DIGER)
-  adres        String
-  il           String?
-  ilce         String?
-  mahalle      String?
-  postaKodu    String?
-  tarif        String? // Ek açıklama/tarif
+  tip       AdresTipi @default(DIGER)
+  adres     String
+  il        String?
+  ilce      String?
+  mahalle   String?
+  postaKodu String?
+  tarif     String? // Ek açıklama/tarif
 
   // Durum
-  varsayilan   Boolean @default(false) // Ana adres mi?
-  aktif        Boolean @default(true)
+  varsayilan Boolean @default(false) // Ana adres mi?
+  aktif      Boolean @default(true)
 
   // Audit
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([cariMusteriId])
   @@index([tip])
@@ -473,38 +472,97 @@ enum CariTipi {
 
 // CSV'den gelen Cari Müşteri verileri için ayrı model
 model CariMusteri {
-  id          Int     @id @default(autoincrement())
-  cariAdi     String  // "CARİ ADI" sütunu
-  musteriKodu String  @unique // "MÜŞTERİ KODU" sütunu
-  
+  id          Int    @id @default(autoincrement())
+  cariAdi     String // "CARİ ADI" sütunu
+  musteriKodu String @unique // "MÜŞTERİ KODU" sütunu
+
   // CSV'den gelen ek bilgiler
-  subeAdi     String? // "ŞUBE ADI" sütunu (SALON, İBRAHİMLİ, OTOGAR, HİTİT, ESKİ OTOGAR)
-  telefon     String? // "TEL" sütunu  
-  irtibatAdi  String? // "İRTİBAT ADI" sütunu
-  cariGrubu   String? // "CARİ GRUBU" sütunu
-  fiyatGrubu  String? // "FİYAT GRUBU" sütunu
-  
+  subeAdi    String? // "ŞUBE ADI" sütunu (SALON, İBRAHİMLİ, OTOGAR, HİTİT, ESKİ OTOGAR)
+  telefon    String? // "TEL" sütunu  
+  irtibatAdi String? // "İRTİBAT ADI" sütunu
+  cariGrubu  String? // "CARİ GRUBU" sütunu
+  fiyatGrubu String? // "FİYAT GRUBU" sütunu
+
   // Durum
-  aktif       Boolean @default(true)
-  
+  aktif Boolean @default(true)
+
   // REMOVED: Old Cari relation - using only CariMusteri now
-  
+
   // Relations
-  adresler    CariAdres[]
-  siparisler  Siparis[] // Orders by this customer
-  hareketler  CariHareket[] // Financial movements
-  odemeler    CariOdeme[] // Payment records
-  
+  adresler   CariAdres[]
+  siparisler Siparis[] // Orders by this customer
+  hareketler CariHareket[] // Financial movements
+  odemeler   CariOdeme[] // Payment records
+
   // Audit
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([musteriKodu])
   @@index([subeAdi])
   @@index([aktif])
 }
 
 // REMOVED: CariMusteriRelation - not needed anymore
+
+// ===================================================================
+// 💸 EXPENSE MANAGEMENT
+// ===================================================================
+
+model MasrafKategori {
+  id        Int      @id @default(autoincrement())
+  ad        String   @unique
+  aciklama  String?
+  aktif     Boolean  @default(true)
+  masraflar Masraf[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Masraf {
+  id         Int            @id @default(autoincrement())
+  kategoriId Int
+  kategori   MasrafKategori @relation(fields: [kategoriId], references: [id])
+
+  tutar      Float
+  paraBirimi String   @default("TRY")
+  tarih      DateTime @default(now())
+
+  aciklama String?
+  belgeUrl String?
+
+  // İlişkiler (opsiyonel)
+  personelId Int?
+  personel   User? @relation(fields: [personelId], references: [id])
+
+  kiraMi   Boolean       @default(false)
+  maasMi   Boolean       @default(false)
+  faturaId Int?
+  fatura   MasrafFatura? @relation(fields: [faturaId], references: [id])
+
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kategoriId])
+  @@index([personelId])
+}
+
+model MasrafFatura {
+  id          Int      @id @default(autoincrement())
+  faturaNo    String   @unique
+  tarih       DateTime @default(now())
+  toplamTutar Float
+  paraBirimi  String   @default("TRY")
+  aciklama    String?
+  dosyaUrl    String?
+
+  kalemler Masraf[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
 // ===================================================================
 // 📋 ORDER MANAGEMENT (Best Practice)
@@ -534,9 +592,9 @@ model Siparis {
   siparisNo String @unique @default(uuid())
 
   // Date Info
-  tarih        DateTime  
+  tarih        DateTime
   teslimTarihi DateTime?
-  teslimSaati  String?    // "14:30" format - API feature requirement 
+  teslimSaati  String? // "14:30" format - API feature requirement 
 
   // Customer Info  
   cariId Int?
@@ -576,13 +634,13 @@ model Siparis {
   maliyetGuncellemeTarihi DateTime? // Maliyet hesaplama tarihi
 
   // İNDİRİM ALANLARI - NULLABLE (API UYUMLULUĞU)
-  indirimTutari Float? @default(0) // İndirim tutarı
+  indirimTutari Float?  @default(0) // İndirim tutarı
   indirimSebebi String? // İndirim sebebi açıklaması
 
   // Status
   durum       SiparisDurumu @default(ONAY_BEKLEYEN)
   kargoDurumu KargoDurumu   @default(ADRESE_TESLIMAT)
-  
+
   // Payment Status - API feature requirement
   odemeDurumu String? @default("bekliyor") // bekliyor, kismi, tamamlandi, iptal
 
@@ -595,8 +653,8 @@ model Siparis {
   // Transfer (Şubeler arası) - YENİ SISTEM
   hedefSubeId   Int?
   hedefSube     Sube? @relation("HedefSube", fields: [hedefSubeId], references: [id])
-  subeNeredenId Int?  // Nereden şube (şubeden şubeye transfer için)
-  subeNereyeId  Int?  // Nereye şube (şubeden şubeye transfer için)
+  subeNeredenId Int? // Nereden şube (şubeden şubeye transfer için)
+  subeNereyeId  Int? // Nereye şube (şubeden şubeye transfer için)
   subeNereden   Sube? @relation("SubeNereden", fields: [subeNeredenId], references: [id])
   subeNereye    Sube? @relation("SubeNereye", fields: [subeNereyeId], references: [id])
 
@@ -971,7 +1029,7 @@ enum TransferDurumu {
 // ===================================================================
 
 model CariHareket {
-  id            Int  @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   cariMusteriId Int
   cariMusteri   CariMusteri @relation(fields: [cariMusteriId], references: [id])
 
@@ -988,7 +1046,7 @@ model CariHareket {
 
   // Document Info
   belgeNo     String?
-  belgeTarihi DateTime? 
+  belgeTarihi DateTime?
 
   // Balance Tracking
   oncekiBakiye  Float?
@@ -1011,7 +1069,7 @@ enum HareketTipi {
 }
 
 model CariOdeme {
-  id            Int  @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   cariMusteriId Int
   cariMusteri   CariMusteri @relation(fields: [cariMusteriId], references: [id])
 
@@ -1025,14 +1083,14 @@ model CariOdeme {
   siparis   Siparis? @relation(fields: [siparisId], references: [id])
 
   // Payment Info
-  odemeTarihi DateTime  
-  vadeTarihi  DateTime? 
+  odemeTarihi DateTime
+  vadeTarihi  DateTime?
 
   // Bank/Check Info
   bankaAdi  String?
   hesapNo   String?
   cekNo     String?
-  cekTarihi DateTime? 
+  cekTarihi DateTime?
 
   // Status
   durum OdemeDurumu @default(ODENDI)

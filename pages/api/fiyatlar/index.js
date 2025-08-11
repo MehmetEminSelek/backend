@@ -1,54 +1,45 @@
-/**
- * =============================================
- * SECURED PRICING API - FULL SECURITY INTEGRATION
- * =============================================
- */
-
-import { secureAPI } from '../../../lib/api-security.js';
-import { withPrismaSecurity } from '../../../lib/prisma-security.js';
-import { PERMISSIONS } from '../../../lib/rbac-enhanced.js';
-import { auditLog } from '../../../lib/audit-logger.js';
-import { validateInput } from '../../../lib/validation.js';
 import prisma from '../../../lib/prisma.js';
+import { withCorsAndAuth } from '../../../lib/cors-wrapper.js';
 
-/**
- * Pricing API Handler with Full Security Integration
- */
-async function pricingHandler(req, res) {
-    const { method } = req;
-
+// Simple pricing API (GET list, POST create) for integration
+export default withCorsAndAuth(async function handler(req, res) {
     try {
-        switch (method) {
-            case 'GET':
-                return await getPricing(req, res);
-            case 'POST':
-                return await createPricing(req, res);
-            case 'PUT':
-                return await updatePricing(req, res);
-            case 'DELETE':
-                return await deletePricing(req, res);
-            default:
-                res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
-                return res.status(405).json({
-                    error: 'Method not allowed',
-                    allowed: ['GET', 'POST', 'PUT', 'DELETE']
-                });
+        if (req.method === 'POST') {
+            const { urunId, birim, kgFiyati, baslangicTarihi, bitisTarihi, fiyatTipi, aktif } = req.body || {};
+            if (!urunId || !birim || typeof kgFiyati !== 'number') {
+                return res.status(400).json({ message: 'urunId, birim ve kgFiyati zorunludur.' });
+            }
+            const price = await prisma.urunFiyat.create({
+                data: {
+                    urunId: parseInt(urunId),
+                    birim,
+                    kgFiyati,
+                    fiyatTipi: fiyatTipi || 'NORMAL',
+                    baslangicTarihi: baslangicTarihi ? new Date(baslangicTarihi) : new Date(),
+                    bitisTarihi: bitisTarihi ? new Date(bitisTarihi) : null,
+                    aktif: aktif !== false,
+                },
+                include: { urun: { select: { id: true, ad: true } } }
+            });
+            return res.status(201).json({ success: true, price });
         }
-    } catch (error) {
-        console.error('Pricing API Error:', error);
 
-        auditLog('PRICING_API_ERROR', 'Pricing API operation failed', {
-            userId: req.user?.userId,
-            method,
-            error: error.message
-        });
+        if (req.method === 'GET') {
+            const list = await prisma.urunFiyat.findMany({
+                where: { deletedAt: null },
+                orderBy: { baslangicTarihi: 'desc' },
+                include: { urun: { select: { id: true, ad: true } } }
+            });
+            return res.status(200).json({ success: true, pricing: list });
+        }
 
-        return res.status(500).json({
-            error: 'Pricing operation failed',
-            code: 'PRICING_ERROR'
-        });
+        res.setHeader('Allow', ['GET', 'POST', 'OPTIONS']);
+        return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
+    } catch (e) {
+        console.error('Fiyatlar API error:', e);
+        return res.status(500).json({ message: 'Fiyat işlemi başarısız', error: e.message });
     }
-}
+});
 
 /**
  * Get Pricing Data with Advanced Filtering and Security
